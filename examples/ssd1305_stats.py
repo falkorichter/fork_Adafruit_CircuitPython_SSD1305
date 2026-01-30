@@ -63,13 +63,12 @@ font = ImageFont.load_default()
 # Alternatively load a TTF font.  Make sure the .ttf font file is in the
 # same directory as the python script!
 # Some other nice fonts to try: http://www.dafont.com/bitmap.php
-# font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 9)
+font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 9)
 
 myTMP117 = qwiic_tmp117.QwiicTMP117()
 myTMP117.begin()
 
 tempC = myTMP117.read_temp_c()
-
 
 i2c = board.I2C()  # uses board.SCL and board.SDA
 veml7700 = adafruit_veml7700.VEML7700(i2c)
@@ -177,7 +176,7 @@ while True:
     # Write four lines of text.
 
     draw.text((x, top + 0), "IP: " + IP, font=font, fill=255)
-    draw.text((x, top + 8), tempC + CPU, font=font, fill=255)
+    draw.text((x, top + 8), tempC + CPU + " light:" + str(veml7700.light), font=font, fill=255)
     draw.text((x, top + 16), MemUsage, font=font, fill=255)
     draw.text((x, top + 25), Disk, font=font, fill=255)
 
