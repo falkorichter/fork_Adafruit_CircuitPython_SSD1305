@@ -1,9 +1,9 @@
 
 
 
-´sudo nano /etc/logrotate.d/ssd1305_stats´
+`sudo nano /etc/logrotate.d/ssd1305_stats`
 
-´´´
+```
 /var/log/ssd1305_stats.log {
     daily
     missingok
@@ -12,12 +12,12 @@
     notifempty
     create 0640 root root
 }
-´´´
+```
 
 
-´sudo nano /etc/systemd/system/ssd1305_stats.service´
+`sudo nano /etc/systemd/system/ssd1305_stats.service`
 
-´´´
+```
 [Unit]
 Description=SSD1305 OLED Status Display
 After=multi-user.target
@@ -32,14 +32,14 @@ StandardError=append:/var/log/ssd1305_stats.log
 
 [Install]
 WantedBy=multi-user.target
-´´´
+```
 
 Test
 Reload the daemon:
-´sudo systemctl daemon-reload´
+`sudo systemctl daemon-reload`
 
 Enable the service (this ensures it runs on boot):
-´sudo systemctl enable ssd1305_stats.service´
+`sudo systemctl enable ssd1305_stats.service`
 
 Start the service now (to test it):
-´sudo systemctl start ssd1305_stats.service´
+`sudo systemctl start ssd1305_stats.service`
