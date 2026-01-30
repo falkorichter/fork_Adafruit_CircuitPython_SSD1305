@@ -1,0 +1,258 @@
+# SPDX-FileCopyrightText: 2024 Adafruit Industries
+#
+# SPDX-License-Identifier: MIT
+
+"""
+Sensor plugin system for hot-pluggable sensor support
+"""
+
+import time
+from abc import ABC, abstractmethod
+from typing import Any, Dict, Optional
+
+
+class SensorPlugin(ABC):
+    """Base class for sensor plugins"""
+
+    def __init__(self, name: str, check_interval: float = 5.0):
+        """
+        Initialize the sensor plugin
+        
+        :param name: Display name for the sensor
+        :param check_interval: How often to check if hardware is available (seconds)
+        """
+        self.name = name
+        self.check_interval = check_interval
+        self.available = False
+        self.last_check_time = 0
+        self.sensor_instance = None
+
+    @abstractmethod
+    def _initialize_hardware(self) -> Any:
+        """
+        Initialize and return the hardware sensor instance.
+        This should raise an exception if hardware is not available.
+        
+        :return: The initialized sensor object
+        """
+        pass
+
+    @abstractmethod
+    def _read_sensor_data(self) -> Dict[str, Any]:
+        """
+        Read data from the sensor.
+        
+        :return: Dictionary with sensor readings
+        """
+        pass
+
+    def check_availability(self) -> bool:
+        """
+        Check if the sensor hardware is available.
+        Automatically called periodically based on check_interval.
+        
+        :return: True if sensor is available, False otherwise
+        """
+        current_time = time.time()
+        if current_time - self.last_check_time < self.check_interval:
+            return self.available
+
+        self.last_check_time = current_time
+
+        try:
+            if self.sensor_instance is None:
+                self.sensor_instance = self._initialize_hardware()
+            self.available = True
+        except Exception:
+            self.available = False
+            self.sensor_instance = None
+
+        return self.available
+
+    def read(self) -> Dict[str, Any]:
+        """
+        Read sensor data if available, otherwise return n/a values.
+        
+        :return: Dictionary with sensor readings or "n/a" for unavailable sensors
+        """
+        if not self.check_availability():
+            return self._get_unavailable_data()
+
+        try:
+            return self._read_sensor_data()
+        except Exception:
+            self.available = False
+            self.sensor_instance = None
+            return self._get_unavailable_data()
+
+    @abstractmethod
+    def _get_unavailable_data(self) -> Dict[str, Any]:
+        """
+        Return a dictionary with "n/a" values for this sensor.
+        
+        :return: Dictionary with "n/a" values
+        """
+        pass
+
+
+class TMP117Plugin(SensorPlugin):
+    """Plugin for TMP117 temperature sensor"""
+
+    def __init__(self, check_interval: float = 5.0):
+        super().__init__("TMP117", check_interval)
+
+    def _initialize_hardware(self) -> Any:
+        """Initialize TMP117 sensor"""
+        import qwiic_tmp117
+
+        sensor = qwiic_tmp117.QwiicTMP117()
+        if not sensor.begin():
+            raise RuntimeError("TMP117 not found")
+        return sensor
+
+    def _read_sensor_data(self) -> Dict[str, Any]:
+        """Read temperature from TMP117"""
+        temp_c = self.sensor_instance.read_temp_c()
+        return {"temp_c": temp_c}
+
+    def _get_unavailable_data(self) -> Dict[str, Any]:
+        """Return n/a for temperature"""
+        return {"temp_c": "n/a"}
+
+
+class BME680Plugin(SensorPlugin):
+    """Plugin for BME680 environmental sensor"""
+
+    def __init__(self, check_interval: float = 5.0, burn_in_time: float = 300):
+        super().__init__("BME680", check_interval)
+        self.burn_in_time = burn_in_time
+        self.start_time = None
+        self.burn_in_data = []
+        self.gas_baseline = None
+        self.hum_baseline = 40.0
+        self.hum_weighting = 0.25
+        self.burn_in_complete = False
+
+    def _initialize_hardware(self) -> Any:
+        """Initialize BME680 sensor"""
+        import bme680
+
+        sensor = bme680.BME680(bme680.I2C_ADDR_SECONDARY)
+        sensor.set_humidity_oversample(bme680.OS_2X)
+        sensor.set_pressure_oversample(bme680.OS_4X)
+        sensor.set_temperature_oversample(bme680.OS_8X)
+        sensor.set_filter(bme680.FILTER_SIZE_3)
+        sensor.set_gas_status(bme680.ENABLE_GAS_MEAS)
+        sensor.set_gas_heater_temperature(320)
+        sensor.set_gas_heater_duration(150)
+        sensor.select_gas_heater_profile(0)
+
+        self.start_time = time.time()
+        self.burn_in_complete = False
+        self.burn_in_data = []
+        return sensor
+
+    def _read_sensor_data(self) -> Dict[str, Any]:
+        """Read environmental data from BME680"""
+        result = {
+            "temperature": "n/a",
+            "humidity": "n/a",
+            "pressure": "n/a",
+            "gas_resistance": "n/a",
+            "air_quality": "n/a",
+        }
+
+        # Collect burn-in data if needed
+        curr_time = time.time()
+        if not self.burn_in_complete:
+            if curr_time - self.start_time < self.burn_in_time:
+                if (
+                    self.sensor_instance.get_sensor_data()
+                    and self.sensor_instance.data.heat_stable
+                ):
+                    gas = self.sensor_instance.data.gas_resistance
+                    self.burn_in_data.append(gas)
+                    result["burn_in_remaining"] = int(
+                        self.burn_in_time - (curr_time - self.start_time)
+                    )
+                    return result
+            elif len(self.burn_in_data) > 0:
+                samples_to_average = self.burn_in_data[-50:]
+                self.gas_baseline = sum(samples_to_average) / len(samples_to_average)
+                self.burn_in_complete = True
+            else:
+                self.gas_baseline = 100000
+                self.burn_in_complete = True
+
+        # Read actual sensor data
+        if (
+            self.sensor_instance.get_sensor_data()
+            and self.sensor_instance.data.heat_stable
+        ):
+            result["temperature"] = self.sensor_instance.data.temperature
+            result["humidity"] = self.sensor_instance.data.humidity
+            result["pressure"] = self.sensor_instance.data.pressure
+            result["gas_resistance"] = self.sensor_instance.data.gas_resistance
+
+            # Calculate air quality score
+            if self.burn_in_complete and self.gas_baseline:
+                gas = self.sensor_instance.data.gas_resistance
+                gas_offset = self.gas_baseline - gas
+
+                hum = self.sensor_instance.data.humidity
+                hum_offset = hum - self.hum_baseline
+
+                if hum_offset > 0:
+                    hum_score = (100 - self.hum_baseline - hum_offset) / (
+                        100 - self.hum_baseline
+                    )
+                    hum_score *= self.hum_weighting * 100
+                else:
+                    hum_score = (self.hum_baseline + hum_offset) / self.hum_baseline
+                    hum_score *= self.hum_weighting * 100
+
+                if gas_offset > 0:
+                    gas_score = (gas / self.gas_baseline) * (
+                        100 - (self.hum_weighting * 100)
+                    )
+                else:
+                    gas_score = 100 - (self.hum_weighting * 100)
+
+                result["air_quality"] = hum_score + gas_score
+
+        return result
+
+    def _get_unavailable_data(self) -> Dict[str, Any]:
+        """Return n/a for all BME680 values"""
+        return {
+            "temperature": "n/a",
+            "humidity": "n/a",
+            "pressure": "n/a",
+            "gas_resistance": "n/a",
+            "air_quality": "n/a",
+        }
+
+
+class VEML7700Plugin(SensorPlugin):
+    """Plugin for VEML7700 light sensor"""
+
+    def __init__(self, check_interval: float = 5.0):
+        super().__init__("VEML7700", check_interval)
+
+    def _initialize_hardware(self) -> Any:
+        """Initialize VEML7700 sensor"""
+        import board
+
+        import adafruit_veml7700
+
+        i2c = board.I2C()
+        return adafruit_veml7700.VEML7700(i2c)
+
+    def _read_sensor_data(self) -> Dict[str, Any]:
+        """Read light level from VEML7700"""
+        light = self.sensor_instance.light
+        return {"light": light}
+
+    def _get_unavailable_data(self) -> Dict[str, Any]:
+        """Return n/a for light level"""
+        return {"light": "n/a"}
