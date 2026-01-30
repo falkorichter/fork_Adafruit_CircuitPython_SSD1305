@@ -91,29 +91,12 @@ bme680sensor.select_gas_heater_profile(0)
 
 # from https://github.com/pimoroni/bme680-python/blob/main/examples/indoor-air-quality.py
 
-
 # start_time and curr_time ensure that the
 # burn_in_time (in seconds) is kept track of.
 
 start_time = time.time()
-curr_time = time.time()
 burn_in_time = 300
-
 burn_in_data = []
-
-# Collect gas resistance burn-in values, then use the average
-# of the last 50 values to set the upper limit for calculating
-# gas_baseline.
-print('Collecting gas resistance burn-in data for 5 mins\n')
-while curr_time - start_time < burn_in_time:
-    curr_time = time.time()
-    if bme680sensor.get_sensor_data() and bme680sensor.data.heat_stable:
-        gas = bme680sensor.data.gas_resistance
-        burn_in_data.append(gas)
-        print(f'Gas: {gas} Ohms')
-        time.sleep(1)
-
-gas_baseline = sum(burn_in_data[-50:]) / 50.0
 
 # Set the humidity baseline to 40%, an optimal indoor humidity.
 hum_baseline = 40.0
@@ -122,7 +105,12 @@ hum_baseline = 40.0
 # calculation of air_quality_score (25:75, humidity:gas)
 hum_weighting = 0.25
 
-print(f'Gas baseline: {gas_baseline} Ohms, humidity baseline: {hum_baseline:.2f} %RH\n')
+# Initialize variables
+gas_baseline = None
+air_quality_score = None
+burn_in_complete = False
+
+print('Starting air quality monitoring - collecting burn-in data for 5 mins...\n')
 
 while True:
     # Draw a black filled box to clear the image.
@@ -131,7 +119,30 @@ while True:
     tempC = "T:" + format(myTMP117.read_temp_c(), ".2f") + " "
     print("Ambient light:", veml7700.light)
 
-    if bme680sensor.get_sensor_data() and bme680sensor.data.heat_stable:
+    # Collect burn-in data if still in burn-in period
+    curr_time = time.time()
+    if not burn_in_complete:
+        if curr_time - start_time < burn_in_time:
+            # Still collecting burn-in data
+            if bme680sensor.get_sensor_data() and bme680sensor.data.heat_stable:
+                gas = bme680sensor.data.gas_resistance
+                burn_in_data.append(gas)
+                print(f'Burn-in: {gas} Ohms ({len(burn_in_data)} samples)')
+        # Burn-in complete, calculate baseline
+        elif len(burn_in_data) > 0:
+            gas_baseline = sum(burn_in_data[-50:]) / min(50.0, len(burn_in_data))
+            print(
+                f'Gas baseline: {gas_baseline} Ohms, '
+                f'humidity baseline: {hum_baseline:.2f} %RH\n'
+            )
+            burn_in_complete = True
+        else:
+            # No data collected, extend burn-in
+            print('No burn-in data collected yet, extending burn-in period...')
+            start_time = curr_time
+
+    # Calculate air quality score if burn-in is complete
+    if burn_in_complete and bme680sensor.get_sensor_data() and bme680sensor.data.heat_stable:
         gas = bme680sensor.data.gas_resistance
         gas_offset = gas_baseline - gas
 
@@ -170,15 +181,21 @@ while True:
     CPU = subprocess.check_output(cmd, shell=True).decode("utf-8")
     cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%s MB  %.2f%%\", $3,$2,$3*100/$2 }'"
     MemUsage = subprocess.check_output(cmd, shell=True).decode("utf-8")
-    cmd = 'df -h | awk \'$NF=="/"{printf "Disk: %d/%d GB  %s", $3,$2,$5}\''
-    Disk = subprocess.check_output(cmd, shell=True).decode("utf-8")
 
-    # Write four lines of text.
-
+    # Write four lines of text on the display.
     draw.text((x, top + 0), "IP: " + IP, font=font, fill=255)
     draw.text((x, top + 8), tempC + CPU + " light:" + str(veml7700.light), font=font, fill=255)
     draw.text((x, top + 16), MemUsage, font=font, fill=255)
-    draw.text((x, top + 25), Disk, font=font, fill=255)
+    
+    # Display air quality score or burn-in status on the 4th line
+    if air_quality_score is not None:
+        draw.text((x, top + 25), f"AirQ: {air_quality_score:.1f}", font=font, fill=255)
+    elif burn_in_complete is False:
+        elapsed = int(curr_time - start_time)
+        remaining = max(0, burn_in_time - elapsed)
+        draw.text((x, top + 25), f"Burn-in: {remaining}s", font=font, fill=255)
+    else:
+        draw.text((x, top + 25), "AirQ: waiting...", font=font, fill=255)
 
     # Display image.
     disp.image(image)
