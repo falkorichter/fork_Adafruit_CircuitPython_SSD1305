@@ -11,16 +11,15 @@
 import subprocess
 import time
 
+import adafruit_veml7700
+import board
 import busio
 import digitalio
+import qwiic_tmp117
 from board import D4, SCL, SDA
 from PIL import Image, ImageDraw, ImageFont
-import time
-import board
-import adafruit_veml7700
 
 import adafruit_ssd1305
-import qwiic_tmp117
 
 # Define the Reset Pin
 oled_reset = digitalio.DigitalInOut(D4)
@@ -77,8 +76,9 @@ veml7700 = adafruit_veml7700.VEML7700(i2c)
 
 
 
-import bme680
 import time
+
+import bme680
 
 bme680sensor = bme680.BME680(bme680.I2C_ADDR_SECONDARY)
 
@@ -104,6 +104,29 @@ burn_in_time = 300
 
 burn_in_data = []
 
+# Collect gas resistance burn-in values, then use the average
+# of the last 50 values to set the upper limit for calculating
+# gas_baseline.
+print('Collecting gas resistance burn-in data for 5 mins\n')
+while curr_time - start_time < burn_in_time:
+    curr_time = time.time()
+    if bme680sensor.get_sensor_data() and bme680sensor.data.heat_stable:
+        gas = bme680sensor.data.gas_resistance
+        burn_in_data.append(gas)
+        print(f'Gas: {gas} Ohms')
+        time.sleep(1)
+
+gas_baseline = sum(burn_in_data[-50:]) / 50.0
+
+# Set the humidity baseline to 40%, an optimal indoor humidity.
+hum_baseline = 40.0
+
+# This sets the balance between humidity and gas reading in the
+# calculation of air_quality_score (25:75, humidity:gas)
+hum_weighting = 0.25
+
+print(f'Gas baseline: {gas_baseline} Ohms, humidity baseline: {hum_baseline:.2f} %RH\n')
+
 while True:
     # Draw a black filled box to clear the image.
     draw.rectangle((0, 0, width, height), outline=0, fill=0)
@@ -111,18 +134,36 @@ while True:
     tempC = "T:" + format(myTMP117.read_temp_c(), ".2f") + " "
     print("Ambient light:", veml7700.light)
 
-    print('Gas baseline: {0} Ohms, humidity baseline: {1:.2f} %RH\n'.format(
-        gas_baseline,
-        hum_baseline))
+    if bme680sensor.get_sensor_data() and bme680sensor.data.heat_stable:
+        gas = bme680sensor.data.gas_resistance
+        gas_offset = gas_baseline - gas
 
-    if bme680sensor.get_sensor_data():
-        output = "{0:.2f} C,{1:.2f} hPa,{2:.2f} %RH".format(bme680sensor.data.temperature, bme680sensor.data.pressure, bme680sensor.data.humidity)
+        hum = bme680sensor.data.humidity
+        hum_offset = hum - hum_baseline
 
-        if bme680sensor.data.heat_stable:
-            print("{0},{1} Ohms".format(output, bme680sensor.data.gas_resistance))
+        # Calculate hum_score as the distance from the hum_baseline.
+        if hum_offset > 0:
+            hum_score = (100 - hum_baseline - hum_offset)
+            hum_score /= (100 - hum_baseline)
+            hum_score *= (hum_weighting * 100)
 
         else:
-            print(output)
+            hum_score = (hum_baseline + hum_offset)
+            hum_score /= hum_baseline
+            hum_score *= (hum_weighting * 100)
+
+        # Calculate gas_score as the distance from the gas_baseline.
+        if gas_offset > 0:
+            gas_score = (gas / gas_baseline)
+            gas_score *= (100 - (hum_weighting * 100))
+
+        else:
+            gas_score = 100 - (hum_weighting * 100)
+
+        # Calculate air_quality_score.
+        air_quality_score = hum_score + gas_score
+
+        print(f'Gas: {gas:.2f} Ohms,humidity: {hum:.2f} %RH,air quality: {air_quality_score:.2f}')
 
     # Shell scripts for system monitoring from here:
     # https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
