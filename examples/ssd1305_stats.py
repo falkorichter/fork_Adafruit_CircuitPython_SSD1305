@@ -76,8 +76,6 @@ veml7700 = adafruit_veml7700.VEML7700(i2c)
 
 
 
-import time
-
 import bme680
 
 bme680sensor = bme680.BME680(bme680.I2C_ADDR_SECONDARY)
@@ -163,7 +161,7 @@ while True:
         # Calculate air_quality_score.
         air_quality_score = hum_score + gas_score
 
-        print(f'Gas: {gas:.2f} Ohms,humidity: {hum:.2f} %RH,air quality: {air_quality_score:.2f}')
+        print(f'Gas: {gas:.2f} Ohms, humidity: {hum:.2f} %RH, air quality: {air_quality_score:.2f}')
 
     # Shell scripts for system monitoring from here:
     # https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
