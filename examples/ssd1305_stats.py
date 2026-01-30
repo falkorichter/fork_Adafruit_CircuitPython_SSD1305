@@ -130,16 +130,19 @@ while True:
                 print(f'Burn-in: {gas} Ohms ({len(burn_in_data)} samples)')
         # Burn-in complete, calculate baseline
         elif len(burn_in_data) > 0:
-            gas_baseline = sum(burn_in_data[-50:]) / min(50.0, len(burn_in_data))
+            # Calculate average of last 50 samples (or all samples if less than 50)
+            samples_to_average = burn_in_data[-50:]
+            gas_baseline = sum(samples_to_average) / len(samples_to_average)
             print(
                 f'Gas baseline: {gas_baseline} Ohms, '
                 f'humidity baseline: {hum_baseline:.2f} %RH\n'
             )
             burn_in_complete = True
         else:
-            # No data collected, extend burn-in
-            print('No burn-in data collected yet, extending burn-in period...')
-            start_time = curr_time
+            # No data collected, use a default baseline to avoid blocking forever
+            gas_baseline = 100000  # Default baseline if no data available
+            print('Warning: No burn-in data collected, using default baseline\n')
+            burn_in_complete = True
 
     # Calculate air quality score if burn-in is complete
     if burn_in_complete and bme680sensor.get_sensor_data() and bme680sensor.data.heat_stable:
@@ -186,7 +189,7 @@ while True:
     draw.text((x, top + 0), "IP: " + IP, font=font, fill=255)
     draw.text((x, top + 8), tempC + CPU + " light:" + str(veml7700.light), font=font, fill=255)
     draw.text((x, top + 16), MemUsage, font=font, fill=255)
-    
+
     # Display air quality score or burn-in status on the 4th line
     if air_quality_score is not None:
         draw.text((x, top + 25), f"AirQ: {air_quality_score:.1f}", font=font, fill=255)
