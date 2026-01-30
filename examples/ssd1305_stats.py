@@ -11,7 +11,6 @@
 import subprocess
 import time
 
-import adafruit_veml7700
 import board
 import busio
 import digitalio
@@ -20,6 +19,8 @@ from board import D4, SCL, SDA
 from PIL import Image, ImageDraw, ImageFont
 
 import adafruit_ssd1305
+import bme680
+import adafruit_veml7700
 
 # Define the Reset Pin
 oled_reset = digitalio.DigitalInOut(D4)
@@ -72,10 +73,6 @@ tempC = myTMP117.read_temp_c()
 
 i2c = board.I2C()  # uses board.SCL and board.SDA
 veml7700 = adafruit_veml7700.VEML7700(i2c)
-
-
-
-import bme680
 
 bme680sensor = bme680.BME680(bme680.I2C_ADDR_SECONDARY)
 
