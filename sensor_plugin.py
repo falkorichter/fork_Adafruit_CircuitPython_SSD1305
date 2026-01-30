@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024 Adafruit Industries
+# SPDX-FileCopyrightText: 2026 Adafruit Industries
 #
 # SPDX-License-Identifier: MIT
 
@@ -129,7 +129,7 @@ class BME680Plugin(SensorPlugin):
         self.start_time = None
         self.burn_in_data = []
         self.gas_baseline = None
-        self.hum_baseline = 40.0
+        self.hum_baseline = 40.0  # Must be > 0 and < 100
         self.hum_weighting = 0.25
         self.burn_in_complete = False
 
@@ -202,16 +202,27 @@ class BME680Plugin(SensorPlugin):
                 hum = self.sensor_instance.data.humidity
                 hum_offset = hum - self.hum_baseline
 
+                # Calculate hum_score as the distance from the hum_baseline
+                # Protect against division by zero
                 if hum_offset > 0:
-                    hum_score = (100 - self.hum_baseline - hum_offset) / (
-                        100 - self.hum_baseline
-                    )
-                    hum_score *= self.hum_weighting * 100
+                    denominator = 100 - self.hum_baseline
+                    if denominator > 0:
+                        hum_score = (100 - self.hum_baseline - hum_offset) / (
+                            100 - self.hum_baseline
+                        )
+                        hum_score *= self.hum_weighting * 100
+                    else:
+                        hum_score = 0
                 else:
-                    hum_score = (self.hum_baseline + hum_offset) / self.hum_baseline
-                    hum_score *= self.hum_weighting * 100
+                    if self.hum_baseline > 0:
+                        hum_score = (self.hum_baseline + hum_offset) / self.hum_baseline
+                        hum_score *= self.hum_weighting * 100
+                    else:
+                        hum_score = 0
 
-                if gas_offset > 0:
+                # Calculate gas_score as the distance from the gas_baseline
+                # Protect against division by zero
+                if gas_offset > 0 and self.gas_baseline > 0:
                     gas_score = (gas / self.gas_baseline) * (
                         100 - (self.hum_weighting * 100)
                     )

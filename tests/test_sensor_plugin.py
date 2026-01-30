@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024 Adafruit Industries
+# SPDX-FileCopyrightText: 2026 Adafruit Industries
 #
 # SPDX-License-Identifier: MIT
 

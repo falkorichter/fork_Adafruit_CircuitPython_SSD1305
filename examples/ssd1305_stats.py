@@ -101,10 +101,11 @@ while True:
     if light == "n/a":
         light_str = "light:n/a"
     else:
-        light_str = f"light:{light}"
+        light_str = f"light:{light:.0f}"
 
     # Shell scripts for system monitoring from here:
     # https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
+    # Note: shell=True is used here with static strings (no user input) for convenience
     cmd = "hostname -I | cut -d' ' -f1"
     IP = subprocess.check_output(cmd, shell=True).decode("utf-8")
     cmd = "top -bn1 | grep load | awk '{printf \"CPU: %.2f\", $(NF-2)}'"

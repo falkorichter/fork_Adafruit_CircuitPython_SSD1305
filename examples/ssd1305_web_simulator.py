@@ -1,4 +1,4 @@
-# SPDX-FileCopyrightText: 2024 Adafruit Industries
+# SPDX-FileCopyrightText: 2026 Adafruit Industries
 #
 # SPDX-License-Identifier: MIT
 
@@ -206,6 +206,7 @@ class DisplayServer(BaseHTTPRequestHandler):
             light_str = f"light:{light:.0f}"
 
         # Get system info
+        # Note: shell=True is used here with static strings (no user input) for convenience
         try:
             cmd = "hostname -I | cut -d' ' -f1"
             IP = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
