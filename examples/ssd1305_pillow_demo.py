@@ -13,6 +13,11 @@ not support PIL/pillow (python imaging library)!
 import board
 import digitalio
 from PIL import Image, ImageDraw, ImageFont
+from board import D4, SCL, SDA
+import busio
+
+# Import the SSD1305 module.
+import adafruit_ssd1305
 
 import adafruit_ssd1305
 
@@ -26,17 +31,16 @@ HEIGHT = 64  # Change to 32 if needed
 BORDER = 8
 COL = 0  # If you see static, change 0 --> 4, fixes alignment
 
-# Use for SPI
-spi = board.SPI()
-oled_cs = digitalio.DigitalInOut(board.D5)
-oled_dc = digitalio.DigitalInOut(board.D6)
-oled = adafruit_ssd1305.SSD1305_SPI(WIDTH, HEIGHT, spi, oled_dc, oled_reset, oled_cs, col=COL)
+# Define the Reset Pin
+oled_reset = digitalio.DigitalInOut(D4)
 
-# Use for I2C.
-# i2c = board.I2C()  # uses board.SCL and board.SDA
-# i2c = board.STEMMA_I2C()  # For using the built-in STEMMA QT connector on a microcontroller
-# oled = adafruit_ssd1305.SSD1305_I2C(WIDTH, HEIGHT, i2c, addr=0x3c, reset=oled_reset, col=COL)
+# Create the I2C interface.
+i2c = busio.I2C(SCL, SDA)
 
+# Create the SSD1305 OLED class.
+# The first two parameters are the pixel width and pixel height.  Change these
+# to the right size for your display!
+oled = adafruit_ssd1305.SSD1305_I2C(128, 32, i2c, addr=0x3C, reset=oled_reset)
 # Clear display.
 oled.fill(0)
 oled.show()
@@ -62,7 +66,7 @@ draw.rectangle(
 font = ImageFont.load_default()
 
 # Draw Some Text
-text = "Hello World!"
+text = "Hello Anna!"
 bbox = font.getbbox(text)
 font_width = bbox[2] - bbox[0]
 font_height = bbox[3] - bbox[1]

@@ -15,8 +15,12 @@ import busio
 import digitalio
 from board import D4, SCL, SDA
 from PIL import Image, ImageDraw, ImageFont
+import time
+import board
+import adafruit_veml7700
 
 import adafruit_ssd1305
+import qwiic_tmp117
 
 # Define the Reset Pin
 oled_reset = digitalio.DigitalInOut(D4)
@@ -62,15 +66,69 @@ font = ImageFont.load_default()
 # Some other nice fonts to try: http://www.dafont.com/bitmap.php
 # font = ImageFont.truetype('/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf', 9)
 
+myTMP117 = qwiic_tmp117.QwiicTMP117()
+myTMP117.begin()
+
+tempC = myTMP117.read_temp_c()
+
+
+i2c = board.I2C()  # uses board.SCL and board.SDA
+veml7700 = adafruit_veml7700.VEML7700(i2c)
+
+
+
+import bme680
+import time
+
+bme680sensor = bme680.BME680(bme680.I2C_ADDR_SECONDARY)
+
+bme680sensor.set_humidity_oversample(bme680.OS_2X)
+bme680sensor.set_pressure_oversample(bme680.OS_4X)
+bme680sensor.set_temperature_oversample(bme680.OS_8X)
+bme680sensor.set_filter(bme680.FILTER_SIZE_3)
+
+bme680sensor.set_gas_status(bme680.ENABLE_GAS_MEAS)
+bme680sensor.set_gas_heater_temperature(320)
+bme680sensor.set_gas_heater_duration(150)
+bme680sensor.select_gas_heater_profile(0)
+
+# from https://github.com/pimoroni/bme680-python/blob/main/examples/indoor-air-quality.py
+
+
+# start_time and curr_time ensure that the
+# burn_in_time (in seconds) is kept track of.
+
+start_time = time.time()
+curr_time = time.time()
+burn_in_time = 300
+
+burn_in_data = []
+
 while True:
     # Draw a black filled box to clear the image.
     draw.rectangle((0, 0, width, height), outline=0, fill=0)
+
+    tempC = "T:" + format(myTMP117.read_temp_c(), ".2f") + " "
+    print("Ambient light:", veml7700.light)
+
+    print('Gas baseline: {0} Ohms, humidity baseline: {1:.2f} %RH\n'.format(
+        gas_baseline,
+        hum_baseline))
+
+    if bme680sensor.get_sensor_data():
+        output = "{0:.2f} C,{1:.2f} hPa,{2:.2f} %RH".format(bme680sensor.data.temperature, bme680sensor.data.pressure, bme680sensor.data.humidity)
+
+        if bme680sensor.data.heat_stable:
+            print("{0},{1} Ohms".format(output, bme680sensor.data.gas_resistance))
+
+        else:
+            print(output)
 
     # Shell scripts for system monitoring from here:
     # https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
     cmd = "hostname -I | cut -d' ' -f1"
     IP = subprocess.check_output(cmd, shell=True).decode("utf-8")
-    cmd = "top -bn1 | grep load | awk '{printf \"CPU Load: %.2f\", $(NF-2)}'"
+    cmd = "top -bn1 | grep load | awk '{printf \"CPU: %.2f\", $(NF-2)}'"
     CPU = subprocess.check_output(cmd, shell=True).decode("utf-8")
     cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%s MB  %.2f%%\", $3,$2,$3*100/$2 }'"
     MemUsage = subprocess.check_output(cmd, shell=True).decode("utf-8")
@@ -80,7 +138,7 @@ while True:
     # Write four lines of text.
 
     draw.text((x, top + 0), "IP: " + IP, font=font, fill=255)
-    draw.text((x, top + 8), CPU, font=font, fill=255)
+    draw.text((x, top + 8), tempC + CPU, font=font, fill=255)
     draw.text((x, top + 16), MemUsage, font=font, fill=255)
     draw.text((x, top + 25), Disk, font=font, fill=255)
 
