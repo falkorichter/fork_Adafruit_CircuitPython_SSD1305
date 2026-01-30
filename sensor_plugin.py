@@ -103,7 +103,7 @@ class TMP117Plugin(SensorPlugin):
 
     def _initialize_hardware(self) -> Any:
         """Initialize TMP117 sensor"""
-        import qwiic_tmp117
+        import qwiic_tmp117  # noqa: PLC0415 - Import inside method for optional dependency
 
         sensor = qwiic_tmp117.QwiicTMP117()
         if not sensor.begin():
@@ -135,7 +135,7 @@ class BME680Plugin(SensorPlugin):
 
     def _initialize_hardware(self) -> Any:
         """Initialize BME680 sensor"""
-        import bme680
+        import bme680  # noqa: PLC0415 - Import inside method for optional dependency
 
         sensor = bme680.BME680(bme680.I2C_ADDR_SECONDARY)
         sensor.set_humidity_oversample(bme680.OS_2X)
@@ -213,12 +213,11 @@ class BME680Plugin(SensorPlugin):
                         hum_score *= self.hum_weighting * 100
                     else:
                         hum_score = 0
+                elif self.hum_baseline > 0:
+                    hum_score = (self.hum_baseline + hum_offset) / self.hum_baseline
+                    hum_score *= self.hum_weighting * 100
                 else:
-                    if self.hum_baseline > 0:
-                        hum_score = (self.hum_baseline + hum_offset) / self.hum_baseline
-                        hum_score *= self.hum_weighting * 100
-                    else:
-                        hum_score = 0
+                    hum_score = 0
 
                 # Calculate gas_score as the distance from the gas_baseline
                 # Protect against division by zero
@@ -252,9 +251,8 @@ class VEML7700Plugin(SensorPlugin):
 
     def _initialize_hardware(self) -> Any:
         """Initialize VEML7700 sensor"""
-        import board
-
-        import adafruit_veml7700
+        import adafruit_veml7700  # noqa: PLC0415 - Import inside method for optional dependency
+        import board  # noqa: PLC0415 - Import inside method for optional dependency
 
         i2c = board.I2C()
         return adafruit_veml7700.VEML7700(i2c)

@@ -315,10 +315,14 @@ class DisplayServer(BaseHTTPRequestHandler):
         <div class="info">
             <h2>About This Demo</h2>
             <ul>
-                <li><strong>Hot-pluggable sensors:</strong> Sensors are automatically detected and show "n/a" when not available</li>
-                <li><strong>Plugin system:</strong> Each sensor is a modular plugin that handles its own initialization and error handling</li>
-                <li><strong>Mocked hardware:</strong> This demo uses simulated sensors for testing without physical hardware</li>
-                <li><strong>Auto-refresh:</strong> Display updates automatically every 200ms</li>
+                <li><strong>Hot-pluggable sensors:</strong> Sensors are automatically detected
+                    and show "n/a" when not available</li>
+                <li><strong>Plugin system:</strong> Each sensor is a modular plugin that handles
+                    its own initialization and error handling</li>
+                <li><strong>Mocked hardware:</strong> This demo uses simulated sensors for
+                    testing without physical hardware</li>
+                <li><strong>Auto-refresh:</strong> Display updates automatically
+                    every 200ms</li>
             </ul>
         </div>
     </div>

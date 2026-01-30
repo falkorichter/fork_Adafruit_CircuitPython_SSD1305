@@ -1,5 +1,53 @@
 
+# SSD1305 Examples
 
+## Examples Overview
+
+### ssd1305_simpletest.py
+Basic example demonstrating simple text and shapes on the SSD1305 display.
+
+### ssd1305_pillow_demo.py
+Demonstrates using the Python Imaging Library (PIL/Pillow) to draw on the display.
+
+### ssd1305_stats.py
+**Updated with hot-pluggable sensor support!**
+
+Displays system statistics and sensor readings on the SSD1305 OLED. Features:
+- **Hot-pluggable sensors**: Automatically detects sensors when connected
+- **Graceful error handling**: Shows "n/a" when sensors are not available
+- **Plugin-based architecture**: Each sensor is a modular plugin
+- Displays:
+  - IP address
+  - Temperature (TMP117)
+  - CPU load
+  - Light level (VEML7700)
+  - Memory usage
+  - Air quality (BME680)
+
+### ssd1305_web_simulator.py
+**NEW**: Web-based simulator for testing without hardware!
+
+A web server that simulates the SSD1305 display with mocked sensors. Perfect for:
+- Testing the plugin system without physical hardware
+- Demonstrating sensor integration
+- Visualizing the display output in a web browser
+
+Run with: `python examples/ssd1305_web_simulator.py` and open http://localhost:8000
+
+## Plugin System
+
+The new plugin system (in `sensor_plugin.py`) provides:
+- **Base `SensorPlugin` class**: Abstract base for all sensor plugins
+- **Automatic error handling**: Sensors gracefully fail when hardware is unavailable
+- **Hot-plug support**: Periodic checking allows sensors to be connected/disconnected
+- **Consistent interface**: All plugins provide data or "n/a" values
+
+### Available Plugins
+- `TMP117Plugin` - Temperature sensor
+- `VEML7700Plugin` - Ambient light sensor
+- `BME680Plugin` - Environmental sensor (temperature, humidity, pressure, gas, air quality)
+
+## System Service Setup
 
 `sudo nano /etc/logrotate.d/ssd1305_stats`
 
