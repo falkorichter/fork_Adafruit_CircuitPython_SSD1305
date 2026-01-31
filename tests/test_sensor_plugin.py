@@ -21,7 +21,7 @@ class TestSensorPlugin(unittest.TestCase):
 
     def setUp(self):
         """Set up test fixtures"""
-        from sensor_plugin import SensorPlugin
+        from sensor_plugins import SensorPlugin
 
         class TestPlugin(SensorPlugin):
             """Concrete implementation for testing"""
@@ -114,7 +114,7 @@ class TestTMP117Plugin(unittest.TestCase):
     def test_initialization(self):
         """Test TMP117 plugin initialization"""
         with patch.dict("sys.modules", {"qwiic_tmp117": self.qwiic_module}):
-            from sensor_plugin import TMP117Plugin
+            from sensor_plugins import TMP117Plugin
 
             plugin = TMP117Plugin()
             self.assertEqual(plugin.name, "TMP117")
@@ -122,7 +122,7 @@ class TestTMP117Plugin(unittest.TestCase):
     def test_read_temperature(self):
         """Test reading temperature from TMP117"""
         with patch.dict("sys.modules", {"qwiic_tmp117": self.qwiic_module}):
-            from sensor_plugin import TMP117Plugin
+            from sensor_plugins import TMP117Plugin
 
             plugin = TMP117Plugin()
             data = plugin.read()
@@ -133,7 +133,7 @@ class TestTMP117Plugin(unittest.TestCase):
         self.mock_sensor.begin.return_value = False
 
         with patch.dict("sys.modules", {"qwiic_tmp117": self.qwiic_module}):
-            from sensor_plugin import TMP117Plugin
+            from sensor_plugins import TMP117Plugin
 
             plugin = TMP117Plugin()
             data = plugin.read()
@@ -142,7 +142,7 @@ class TestTMP117Plugin(unittest.TestCase):
     def test_unavailable_data(self):
         """Test TMP117 unavailable data format"""
         with patch.dict("sys.modules", {"qwiic_tmp117": self.qwiic_module}):
-            from sensor_plugin import TMP117Plugin
+            from sensor_plugins import TMP117Plugin
 
             plugin = TMP117Plugin()
             data = plugin._get_unavailable_data()
@@ -168,7 +168,7 @@ class TestVEML7700Plugin(unittest.TestCase):
             "sys.modules",
             {"adafruit_veml7700": self.veml_module, "board": self.board_module},
         ):
-            from sensor_plugin import VEML7700Plugin
+            from sensor_plugins import VEML7700Plugin
 
             plugin = VEML7700Plugin()
             data = plugin.read()
@@ -180,7 +180,7 @@ class TestVEML7700Plugin(unittest.TestCase):
             "sys.modules",
             {"adafruit_veml7700": self.veml_module, "board": self.board_module},
         ):
-            from sensor_plugin import VEML7700Plugin
+            from sensor_plugins import VEML7700Plugin
 
             plugin = VEML7700Plugin()
             data = plugin._get_unavailable_data()
@@ -215,7 +215,7 @@ class TestBME680Plugin(unittest.TestCase):
     def test_initialization(self):
         """Test BME680 plugin initialization"""
         with patch.dict("sys.modules", {"bme680": self.bme_module}):
-            from sensor_plugin import BME680Plugin
+            from sensor_plugins import BME680Plugin
 
             plugin = BME680Plugin(burn_in_time=1.0)
             self.assertEqual(plugin.name, "BME680")
@@ -224,7 +224,7 @@ class TestBME680Plugin(unittest.TestCase):
     def test_burn_in_period(self):
         """Test BME680 burn-in period"""
         with patch.dict("sys.modules", {"bme680": self.bme_module}):
-            from sensor_plugin import BME680Plugin
+            from sensor_plugins import BME680Plugin
 
             plugin = BME680Plugin(burn_in_time=0.1)
             data = plugin.read()
@@ -235,7 +235,7 @@ class TestBME680Plugin(unittest.TestCase):
     def test_read_after_burn_in(self):
         """Test BME680 reading after burn-in"""
         with patch.dict("sys.modules", {"bme680": self.bme_module}):
-            from sensor_plugin import BME680Plugin
+            from sensor_plugins import BME680Plugin
 
             plugin = BME680Plugin(burn_in_time=0.0)
             # Force burn-in complete
@@ -251,7 +251,7 @@ class TestBME680Plugin(unittest.TestCase):
     def test_unavailable_data(self):
         """Test BME680 unavailable data format"""
         with patch.dict("sys.modules", {"bme680": self.bme_module}):
-            from sensor_plugin import BME680Plugin
+            from sensor_plugins import BME680Plugin
 
             plugin = BME680Plugin()
             data = plugin._get_unavailable_data()

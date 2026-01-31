@@ -21,9 +21,9 @@ from PIL import Image, ImageDraw, ImageFont
 
 import adafruit_ssd1305
 
-# Add parent directory to path to import sensor_plugin
+# Add parent directory to path to import sensor_plugins
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from sensor_plugin import BME680Plugin, TMP117Plugin, VEML7700Plugin
+from sensor_plugins import BME680Plugin, TMP117Plugin, VEML7700Plugin
 
 # Define the Reset Pin
 oled_reset = digitalio.DigitalInOut(D4)

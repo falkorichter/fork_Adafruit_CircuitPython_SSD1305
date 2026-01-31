@@ -108,9 +108,9 @@ for attr in dir(MockBME680):
     if not attr.startswith("_"):
         setattr(sys.modules["bme680"], attr, getattr(MockBME680, attr))
 
-# Add parent directory to path to import sensor_plugin
+# Add parent directory to path to import sensor_plugins
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from sensor_plugin import BME680Plugin, TMP117Plugin, VEML7700Plugin
+from sensor_plugins import BME680Plugin, TMP117Plugin, VEML7700Plugin
 
 
 class DisplaySimulator:
