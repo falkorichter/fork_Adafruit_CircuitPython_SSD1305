@@ -260,5 +260,36 @@ class TestBME680Plugin(unittest.TestCase):
             self.assertEqual(data["air_quality"], "n/a")
 
 
+class TestSystemInfoPlugins(unittest.TestCase):
+    """Test system information sensor plugins"""
+
+    def test_ip_address_plugin(self):
+        """Test IPAddressPlugin reads IP address"""
+        from sensor_plugins import IPAddressPlugin
+
+        plugin = IPAddressPlugin()
+        data = plugin.read()
+        self.assertIn("ip_address", data)
+        self.assertIsNotNone(data["ip_address"])
+
+    def test_cpu_load_plugin(self):
+        """Test CPULoadPlugin reads CPU load"""
+        from sensor_plugins import CPULoadPlugin
+
+        plugin = CPULoadPlugin()
+        data = plugin.read()
+        self.assertIn("cpu_load", data)
+        self.assertIsNotNone(data["cpu_load"])
+
+    def test_memory_usage_plugin(self):
+        """Test MemoryUsagePlugin reads memory usage"""
+        from sensor_plugins import MemoryUsagePlugin
+
+        plugin = MemoryUsagePlugin()
+        data = plugin.read()
+        self.assertIn("memory_usage", data)
+        self.assertIsNotNone(data["memory_usage"])
+
+
 if __name__ == "__main__":
     unittest.main()

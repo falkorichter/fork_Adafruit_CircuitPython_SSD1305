@@ -8,7 +8,6 @@ Web server to visualize SSD1305 display output with mocked sensors
 
 import io
 import random
-import subprocess
 import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
@@ -110,7 +109,14 @@ for attr in dir(MockBME680):
 
 # Add parent directory to path to import sensor_plugins
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from sensor_plugins import BME680Plugin, TMP117Plugin, VEML7700Plugin
+from sensor_plugins import (
+    BME680Plugin,
+    CPULoadPlugin,
+    IPAddressPlugin,
+    MemoryUsagePlugin,
+    TMP117Plugin,
+    VEML7700Plugin,
+)
 
 
 class DisplaySimulator:
@@ -154,6 +160,9 @@ class DisplayServer(BaseHTTPRequestHandler):
     tmp117 = None
     veml7700 = None
     bme680 = None
+    ip_address = None
+    cpu_load = None
+    memory_usage = None
     font = None
     last_update = 0
 
@@ -190,144 +199,51 @@ class DisplayServer(BaseHTTPRequestHandler):
         temp_data = self.tmp117.read()
         light_data = self.veml7700.read()
         bme_data = self.bme680.read()
+        ip_data = self.ip_address.read()
+        cpu_data = self.cpu_load.read()
+        memory_data = self.memory_usage.read()
 
-        # Format temperature display
-        temp_c = temp_data["temp_c"]
-        if temp_c == "n/a":
-            temp_str = "T:n/a"
-        else:
-            temp_str = f"T:{temp_c:.2f}"
-
-        # Format light display
-        light = light_data["light"]
-        if light == "n/a":
-            light_str = "light:n/a"
-        else:
-            light_str = f"light:{light:.0f}"
+        # Use plugin format methods
+        temp_str = self.tmp117.format_display(temp_data)
+        light_str = self.veml7700.format_display(light_data)
+        air_quality_str = self.bme680.format_display(bme_data)
 
         # Get system info
-        # Note: shell=True is used here with static strings (no user input) for convenience
-        try:
-            cmd = "hostname -I | cut -d' ' -f1"
-            IP = subprocess.check_output(cmd, shell=True).decode("utf-8").strip()
-            if not IP:
-                IP = "127.0.0.1"
-        except Exception:
-            IP = "127.0.0.1"
-
-        try:
-            cmd = "top -bn1 | grep load | awk '{printf \"CPU: %.2f\", $(NF-2)}'"
-            CPU = subprocess.check_output(cmd, shell=True).decode("utf-8")
-        except Exception:
-            CPU = "CPU: 0.50"
-
-        try:
-            cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%s MB\", $3,$2}'"
-            MemUsage = subprocess.check_output(cmd, shell=True).decode("utf-8")
-        except Exception:
-            MemUsage = "Mem: 512/2048 MB"
+        ip = ip_data.get("ip_address", "n/a")
+        cpu = cpu_data.get("cpu_load", "n/a")
+        memory = memory_data.get("memory_usage", "n/a")
 
         # Draw text on display
         padding = -2
         top = padding
         x = 0
 
-        self.display.draw.text((x, top + 0), f"IP: {IP}", font=self.font, fill=255)
+        self.display.draw.text((x, top + 0), f"IP: {ip}", font=self.font, fill=255)
         self.display.draw.text(
-            (x, top + 8), f"{temp_str} {CPU} {light_str}", font=self.font, fill=255
+            (x, top + 8), f"{temp_str} CPU: {cpu} {light_str}", font=self.font, fill=255
         )
-        self.display.draw.text((x, top + 16), MemUsage, font=self.font, fill=255)
-
-        # Display air quality score or burn-in status
-        air_quality = bme_data.get("air_quality", "n/a")
-        burn_in_remaining = bme_data.get("burn_in_remaining")
-
-        if burn_in_remaining is not None:
-            self.display.draw.text(
-                (x, top + 25), f"Burn-in: {burn_in_remaining}s", font=self.font, fill=255
-            )
-        elif air_quality != "n/a":
-            self.display.draw.text(
-                (x, top + 25), f"AirQ: {air_quality:.1f}", font=self.font, fill=255
-            )
-        else:
-            self.display.draw.text((x, top + 25), "AirQ: n/a", font=self.font, fill=255)
+        self.display.draw.text((x, top + 16), f"Mem: {memory}", font=self.font, fill=255)
+        self.display.draw.text((x, top + 25), air_quality_str, font=self.font, fill=255)
 
     def get_html(self):
         """Return the HTML page"""
-        return """
+        # Load HTML template from file
+        template_path = Path(__file__).parent / "web_simulator_template.html"
+        try:
+            with open(template_path) as f:
+                return f.read()
+        except FileNotFoundError:
+            # Fallback to inline HTML if template not found
+            return """
 <!DOCTYPE html>
 <html>
 <head>
     <title>SSD1305 Display Simulator</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f0f0f0;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 10px;
-            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #333;
-            text-align: center;
-        }
-        .display-container {
-            text-align: center;
-            margin: 20px 0;
-            padding: 20px;
-            background-color: #000;
-            border-radius: 5px;
-        }
-        #display {
-            border: 2px solid #333;
-            image-rendering: pixelated;
-            image-rendering: -moz-crisp-edges;
-            image-rendering: crisp-edges;
-        }
-        .info {
-            margin-top: 20px;
-            padding: 15px;
-            background-color: #e8f4f8;
-            border-radius: 5px;
-        }
-        .info h2 {
-            margin-top: 0;
-            color: #2c5aa0;
-        }
-        .info ul {
-            line-height: 1.6;
-        }
-    </style>
 </head>
 <body>
-    <div class="container">
-        <h1>SSD1305 Display Simulator</h1>
-        <div class="display-container">
-            <img id="display" src="/display.png" alt="OLED Display">
-        </div>
-        <div class="info">
-            <h2>About This Demo</h2>
-            <ul>
-                <li><strong>Hot-pluggable sensors:</strong> Sensors are automatically detected
-                    and show "n/a" when not available</li>
-                <li><strong>Plugin system:</strong> Each sensor is a modular plugin that handles
-                    its own initialization and error handling</li>
-                <li><strong>Mocked hardware:</strong> This demo uses simulated sensors for
-                    testing without physical hardware</li>
-                <li><strong>Auto-refresh:</strong> Display updates automatically
-                    every 200ms</li>
-            </ul>
-        </div>
-    </div>
+    <h1>SSD1305 Display Simulator</h1>
+    <img id="display" src="/display.png" alt="OLED Display">
     <script>
-        // Auto-refresh the display image
         function refreshDisplay() {
             var img = document.getElementById('display');
             img.src = '/display.png?' + new Date().getTime();
@@ -360,6 +276,9 @@ def run_server(port=8000):
     DisplayServer.tmp117 = TMP117Plugin(check_interval=5.0)
     DisplayServer.veml7700 = VEML7700Plugin(check_interval=5.0)
     DisplayServer.bme680 = BME680Plugin(check_interval=5.0, burn_in_time=30)
+    DisplayServer.ip_address = IPAddressPlugin(check_interval=30.0)
+    DisplayServer.cpu_load = CPULoadPlugin(check_interval=1.0)
+    DisplayServer.memory_usage = MemoryUsagePlugin(check_interval=5.0)
 
     # Start server
     server_address = ("", port)

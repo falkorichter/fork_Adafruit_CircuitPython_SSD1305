@@ -33,3 +33,10 @@ class VEML7700Plugin(SensorPlugin):
     def _get_unavailable_data(self) -> Dict[str, Any]:
         """Return n/a for light level"""
         return {"light": "n/a"}
+
+    def format_display(self, data: Dict[str, Any]) -> str:
+        """Format light data for display"""
+        light = data.get("light", "n/a")
+        if light == "n/a":
+            return "light:n/a"
+        return f"light:{light:.0f}"

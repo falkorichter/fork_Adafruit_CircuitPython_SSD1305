@@ -133,3 +133,15 @@ class BME680Plugin(SensorPlugin):
             "gas_resistance": "n/a",
             "air_quality": "n/a",
         }
+
+    def format_display(self, data: Dict[str, Any]) -> str:
+        """Format air quality or burn-in status for display"""
+        burn_in_remaining = data.get("burn_in_remaining")
+        air_quality = data.get("air_quality", "n/a")
+
+        if burn_in_remaining is not None:
+            return f"Burn-in: {burn_in_remaining}s"
+        elif air_quality != "n/a":
+            return f"AirQ: {air_quality:.1f}"
+        else:
+            return "AirQ: n/a"

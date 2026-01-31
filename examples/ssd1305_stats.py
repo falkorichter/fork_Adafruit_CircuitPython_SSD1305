@@ -8,7 +8,6 @@
 # Adafruit Blinka to support CircuitPython libraries. CircuitPython does
 # not support PIL/pillow (python imaging library)!
 
-import subprocess
 import sys
 import time
 from pathlib import Path
@@ -23,7 +22,14 @@ import adafruit_ssd1305
 
 # Add parent directory to path to import sensor_plugins
 sys.path.insert(0, str(Path(__file__).parent.parent))
-from sensor_plugins import BME680Plugin, TMP117Plugin, VEML7700Plugin
+from sensor_plugins import (
+    BME680Plugin,
+    CPULoadPlugin,
+    IPAddressPlugin,
+    MemoryUsagePlugin,
+    TMP117Plugin,
+    VEML7700Plugin,
+)
 
 # Define the Reset Pin
 oled_reset = digitalio.DigitalInOut(D4)
@@ -76,6 +82,9 @@ except Exception:
 tmp117 = TMP117Plugin(check_interval=5.0)
 veml7700 = VEML7700Plugin(check_interval=5.0)
 bme680 = BME680Plugin(check_interval=5.0, burn_in_time=300)
+ip_address = IPAddressPlugin(check_interval=30.0)
+cpu_load = CPULoadPlugin(check_interval=1.0)
+memory_usage = MemoryUsagePlugin(check_interval=5.0)
 
 print("Starting sensor monitoring with hot-pluggable support...")
 print("Sensors will be automatically detected when connected.\n")
@@ -88,46 +97,25 @@ while True:
     temp_data = tmp117.read()
     light_data = veml7700.read()
     bme_data = bme680.read()
+    ip_data = ip_address.read()
+    cpu_data = cpu_load.read()
+    memory_data = memory_usage.read()
 
-    # Format temperature display
-    temp_c = temp_data["temp_c"]
-    if temp_c == "n/a":
-        temp_str = "T:n/a"
-    else:
-        temp_str = f"T:{temp_c:.2f}"
+    # Use plugin format methods
+    temp_str = tmp117.format_display(temp_data)
+    light_str = veml7700.format_display(light_data)
+    air_quality_str = bme680.format_display(bme_data)
 
-    # Format light display
-    light = light_data["light"]
-    if light == "n/a":
-        light_str = "light:n/a"
-    else:
-        light_str = f"light:{light:.0f}"
-
-    # Shell scripts for system monitoring from here:
-    # https://unix.stackexchange.com/questions/119126/command-to-display-memory-usage-disk-usage-and-cpu-load
-    # Note: shell=True is used here with static strings (no user input) for convenience
-    cmd = "hostname -I | cut -d' ' -f1"
-    IP = subprocess.check_output(cmd, shell=True).decode("utf-8")
-    cmd = "top -bn1 | grep load | awk '{printf \"CPU: %.2f\", $(NF-2)}'"
-    CPU = subprocess.check_output(cmd, shell=True).decode("utf-8")
-    cmd = "free -m | awk 'NR==2{printf \"Mem: %s/%s MB  %.2f%%\", $3,$2,$3*100/$2 }'"
-    MemUsage = subprocess.check_output(cmd, shell=True).decode("utf-8")
+    # Get system info from plugins
+    ip = ip_data.get("ip_address", "n/a")
+    cpu = cpu_data.get("cpu_load", "n/a")
+    memory = memory_data.get("memory_usage", "n/a")
 
     # Write four lines of text on the display.
-    draw.text((x, top + 0), "IP: " + IP, font=font, fill=255)
-    draw.text((x, top + 8), f"{temp_str} {CPU} {light_str}", font=font, fill=255)
-    draw.text((x, top + 16), MemUsage, font=font, fill=255)
-
-    # Display air quality score or burn-in status on the 4th line
-    air_quality = bme_data.get("air_quality", "n/a")
-    burn_in_remaining = bme_data.get("burn_in_remaining")
-
-    if burn_in_remaining is not None:
-        draw.text((x, top + 25), f"Burn-in: {burn_in_remaining}s", font=font, fill=255)
-    elif air_quality != "n/a":
-        draw.text((x, top + 25), f"AirQ: {air_quality:.1f}", font=font, fill=255)
-    else:
-        draw.text((x, top + 25), "AirQ: n/a", font=font, fill=255)
+    draw.text((x, top + 0), f"IP: {ip}", font=font, fill=255)
+    draw.text((x, top + 8), f"{temp_str} CPU: {cpu} {light_str}", font=font, fill=255)
+    draw.text((x, top + 16), f"Mem: {memory}", font=font, fill=255)
+    draw.text((x, top + 25), air_quality_str, font=font, fill=255)
 
     # Display image.
     disp.image(image)

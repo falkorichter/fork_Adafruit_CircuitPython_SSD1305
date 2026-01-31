@@ -34,3 +34,10 @@ class TMP117Plugin(SensorPlugin):
     def _get_unavailable_data(self) -> Dict[str, Any]:
         """Return n/a for temperature"""
         return {"temp_c": "n/a"}
+
+    def format_display(self, data: Dict[str, Any]) -> str:
+        """Format temperature data for display"""
+        temp_c = data.get("temp_c", "n/a")
+        if temp_c == "n/a":
+            return "T:n/a"
+        return f"T:{temp_c:.2f}"
