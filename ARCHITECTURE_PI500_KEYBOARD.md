@@ -122,19 +122,19 @@ Since you have a Qwiic/STEMMA QT connector, you can use the **Adafruit QT Py** w
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│                     RASPBERRY PI 500+                          │
+│                     RASPBERRY PI 500+                         │
 │  ┌─────────────────┐    ┌──────────────────────────────────┐  │
-│  │  Built-in       │    │  Python Application               │  │
+│  │  Built-in       │    │  Python Application              │  │
 │  │  Keyboard       ├───►│  (bluetooth_keyboard_service.py) │  │
 │  │  (evdev)        │    │         │                        │  │
 │  └─────────────────┘    └─────────┼────────────────────────┘  │
-│                                   │                            │
-│                                   ▼                            │
-│                    ┌──────────────────────────────┐            │
-│                    │  Built-in Bluetooth          │            │
-│                    │  (BCM43438 or similar)       │            │
-│                    │  BlueZ + D-Bus + HID Profile │            │
-│                    └──────────────┬───────────────┘            │
+│                                   │                           │
+│                                   ▼                           │
+│                    ┌──────────────────────────────┐           │
+│                    │  Built-in Bluetooth          │           │
+│                    │  (BCM43438 or similar)       │           │
+│                    │  BlueZ + D-Bus + HID Profile │           │
+│                    └──────────────┬───────────────┘           │
 └───────────────────────────────────┼───────────────────────────┘
                                     │ Bluetooth LE/Classic
                                     │ (Wireless)
@@ -176,14 +176,14 @@ Since you have a Qwiic/STEMMA QT connector, you can use the **Adafruit QT Py** w
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│                     RASPBERRY PI 500+                          │
+│                     RASPBERRY PI 500+                         │
 │  ┌─────────────────┐    ┌──────────────────────────────────┐  │
-│  │  Built-in       │    │  Python Application               │  │
+│  │  Built-in       │    │  Python Application              │  │
 │  │  Keyboard       ├───►│  (Sends HID reports via UART)    │  │
 │  │  (evdev)        │    │         │                        │  │
 │  └─────────────────┘    └─────────┼────────────────────────┘  │
 │                                   │ UART/Serial               │
-│                                   ▼                            │
+│                                   ▼                           │
 │    ┌───────────────────────────────────────────────────────┐  │
 │    │  BLUETOOTH HID MODULE                                 │  │
 │    │  (Adafruit Bluefruit LE UART Friend / HC-05 with HID) │  │
@@ -248,8 +248,8 @@ Below is a sketch of how to integrate Bluetooth HID functionality into the exist
 
 ```
 ┌────────────────────────────────────────────────────────────────────┐
-│                     KEYBOARD BLUETOOTH BRIDGE                       │
-│                                                                     │
+│                     KEYBOARD BLUETOOTH BRIDGE                      │
+│                                                                    │
 │   ┌─────────────────────┐         ┌─────────────────────────────┐  │
 │   │  keyboard_plugin.py │         │  bluetooth_hid_service.py   │  │
 │   │  (Existing)         │         │  (New Component)            │  │
