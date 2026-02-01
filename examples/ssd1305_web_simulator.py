@@ -578,7 +578,7 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
 
     # Start WebSocket server if enabled and available
     if enable_websocket and WEBSOCKETS_AVAILABLE:
-        async def websocket_handler(websocket, path):
+        async def websocket_handler(websocket):
             """Handle WebSocket connections"""
             with DisplayServer.websocket_lock:
                 DisplayServer.websocket_clients.add(websocket)
@@ -611,11 +611,11 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
         
         def run_websocket_server():
             """Run WebSocket server in event loop"""
-            loop = asyncio.new_event_loop()
-            asyncio.set_event_loop(loop)
-            start_server = websockets.serve(websocket_handler, "0.0.0.0", websocket_port)
-            loop.run_until_complete(start_server)
-            loop.run_forever()
+            async def start_websocket():
+                async with websockets.serve(websocket_handler, "0.0.0.0", websocket_port):
+                    await asyncio.Future()  # run forever
+            
+            asyncio.run(start_websocket())
         
         ws_thread = threading.Thread(target=run_websocket_server, daemon=True)
         ws_thread.start()
