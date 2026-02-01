@@ -60,10 +60,10 @@ parser.add_argument(
 parser.add_argument(
     "--input-method",
     type=str,
-    default="auto",
+    default="evdev",
     choices=["auto", "pynput", "evdev", "file", "stdin"],
     help=(
-        "Input detection method: auto (try all), pynput (X11), evdev (Linux), "
+        "Input detection method: evdev (default, Linux), auto (try all), pynput (X11), "
         "file (timestamps), stdin (terminal)"
     ),
 )

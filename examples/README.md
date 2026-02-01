@@ -47,7 +47,7 @@ The stats display now supports automatic display blanking to prevent OLED burn-i
 
 **Usage:**
 
-Default behavior (10-second timeout with auto-detect input method):
+Default behavior (10-second timeout with evdev input method):
 ```bash
 python examples/ssd1305_stats.py
 ```
@@ -66,8 +66,8 @@ python examples/ssd1305_stats.py --blank-timeout 0
 
 Select specific input detection method:
 ```bash
-# Use evdev for Linux systems (recommended for headless systems)
-python examples/ssd1305_stats.py --input-method evdev
+# Use auto-detect to try all methods (pynput → evdev → file → stdin)
+python examples/ssd1305_stats.py --input-method auto
 
 # Use file timestamp monitoring (universal fallback)
 python examples/ssd1305_stats.py --input-method file
@@ -88,29 +88,30 @@ python examples/ssd1305_stats.py --debug
 
 The display supports four different keyboard input detection methods:
 
-1. **pynput** (Option A): Cross-platform keyboard monitoring using the pynput library
-   - Works on systems with X11/display server
-   - Requires: `pip install pynput`
-   - Best for desktop environments
-
-2. **evdev** (Option B): Linux-specific, reads from `/dev/input/event*`
+1. **evdev** (DEFAULT): Linux-specific, reads from `/dev/input/event*`
    - Works on Linux systems without X11
    - Requires: `pip install evdev`
    - May need permission to access `/dev/input` (add user to `input` group)
    - Best for headless Raspberry Pi setups
+   - **This is now the default method**
 
-3. **file** (Option C): File timestamp monitoring of `/dev/input` devices
+2. **pynput** (Option A): Cross-platform keyboard monitoring using the pynput library
+   - Works on systems with X11/display server
+   - Requires: `pip install pynput`
+   - Best for desktop environments
+
+3. **file** (Option B): File timestamp monitoring of `/dev/input` devices
    - Universal fallback that works on most Linux systems
    - No additional dependencies required
    - Monitors file access times to detect input activity
    - Best for systems where evdev doesn't work
 
-4. **stdin** (Option D): Terminal input monitoring
+4. **stdin** (Option C): Terminal input monitoring
    - Only works when running interactively in a terminal
    - No additional dependencies required
    - Fallback for testing purposes
 
-**Auto-detect mode** (default): Tries all methods in order until one works:
+**Auto-detect mode**: Use `--input-method auto` to try all methods in order until one works:
 `pynput` → `evdev` → `file` → `stdin`
 
 **How It Works:**
@@ -241,12 +242,14 @@ After=multi-user.target
 [Service]
 Type=simple
 User=root
-# Default (10-second timeout with auto-detect):
+# Default (10-second timeout with evdev method):
 ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py
-# Custom timeout (30 seconds) with evdev method (recommended for headless):
-# ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --blank-timeout 30 --input-method evdev
+# Custom timeout (30 seconds):
+# ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --blank-timeout 30
+# With auto-detect method (tries all methods):
+# ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --input-method auto
 # With debug logging to troubleshoot input detection:
-# ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --debug --input-method evdev
+# ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --debug
 # Disable burn-in prevention:
 # ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --no-blank
 Restart=on-failure
@@ -259,16 +262,22 @@ WantedBy=multi-user.target
 
 **Input Method for Systemd Services:**
 
-For headless systems running as systemd services, the recommended input method is `evdev`:
+For headless systems running as systemd services, evdev is now the default method:
 ```bash
-# Install evdev
+# Install evdev (required)
 /home/user/env/bin/pip install evdev
 
 # Add user to input group (required for evdev to access /dev/input)
 sudo usermod -a -G input root
+```
+
+If evdev doesn't work on your system, you can use the auto-detect or file timestamp methods:
+```bash
+# Use auto-detect (tries all methods until one works)
+# Add --input-method auto to the ExecStart line
 
 # Or use file timestamp method (no dependencies, no special permissions needed)
-# Just add --input-method file to the ExecStart line
+# Add --input-method file to the ExecStart line
 ```
 
 **Note:** If using `pynput`, install it in the Python environment:
