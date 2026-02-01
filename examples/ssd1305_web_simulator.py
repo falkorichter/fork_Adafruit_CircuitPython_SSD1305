@@ -308,7 +308,7 @@ def run_server(port=8000, use_mocks=False):
     # Initialize sensor plugins
     DisplayServer.tmp117 = TMP117Plugin(check_interval=5.0)
     DisplayServer.veml7700 = VEML7700Plugin(check_interval=5.0)
-    DisplayServer.bme680 = BME680Plugin(check_interval=5.0, burn_in_time=30)
+    DisplayServer.bme680 = BME680Plugin(check_interval=5.0, burn_in_time=30, read_only_cache=True)
     DisplayServer.ip_address = IPAddressPlugin(check_interval=30.0)
     DisplayServer.cpu_load = CPULoadPlugin(check_interval=1.0)
     DisplayServer.memory_usage = MemoryUsagePlugin(check_interval=5.0)

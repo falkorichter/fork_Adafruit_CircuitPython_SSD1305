@@ -214,19 +214,34 @@ class TestBME680Plugin(unittest.TestCase):
 
     def test_initialization(self):
         """Test BME680 plugin initialization"""
+        import tempfile
+        
         with patch.dict("sys.modules", {"bme680": self.bme_module}):
             from sensor_plugins import BME680Plugin
 
-            plugin = BME680Plugin(burn_in_time=1.0)
+            # Create a temporary non-existent cache file path
+            with tempfile.NamedTemporaryFile(delete=True, suffix='.json') as f:
+                cache_file = f.name
+            # File is now deleted, so it won't load any cache
+            
+            plugin = BME680Plugin(burn_in_time=1.0, cache_file=cache_file)
             self.assertEqual(plugin.name, "BME680")
             self.assertFalse(plugin.burn_in_complete)
 
     def test_burn_in_period(self):
         """Test BME680 burn-in period"""
+        import tempfile
+        
         with patch.dict("sys.modules", {"bme680": self.bme_module}):
             from sensor_plugins import BME680Plugin
 
-            plugin = BME680Plugin(burn_in_time=0.1)
+            # Create a temporary non-existent cache file path
+            with tempfile.NamedTemporaryFile(delete=True, suffix='.json') as f:
+                cache_file = f.name
+            # File is now deleted, so it won't load any cache
+            
+            # Use a longer burn-in time to ensure we catch it in progress
+            plugin = BME680Plugin(burn_in_time=10.0, cache_file=cache_file)
             data = plugin.read()
 
             # Should show burn-in remaining time
@@ -258,6 +273,154 @@ class TestBME680Plugin(unittest.TestCase):
             self.assertEqual(data["temperature"], "n/a")
             self.assertEqual(data["humidity"], "n/a")
             self.assertEqual(data["air_quality"], "n/a")
+
+    def test_cache_save_and_load(self):
+        """Test BME680 burn-in cache save and load"""
+        import tempfile
+        
+        with patch.dict("sys.modules", {"bme680": self.bme_module}):
+            from sensor_plugins import BME680Plugin
+
+            # Create a temporary cache file
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+                cache_file = f.name
+
+            try:
+                # Create plugin and set burn-in data
+                plugin = BME680Plugin(burn_in_time=0.0, cache_file=cache_file)
+                plugin.gas_baseline = 50000
+                plugin.burn_in_complete = True
+                
+                # Save cache
+                result = plugin._save_burn_in_cache()
+                self.assertTrue(result)
+                
+                # Create new plugin and load cache
+                plugin2 = BME680Plugin(burn_in_time=300, cache_file=cache_file)
+                # Trigger initialization by calling read
+                data = plugin2.read()
+                # The cache should be loaded during initialization
+                self.assertTrue(plugin2.burn_in_complete)
+                self.assertEqual(plugin2.gas_baseline, 50000)
+                # Should not show burn_in_remaining since cache was loaded
+                self.assertNotIn("burn_in_remaining", data)
+            finally:
+                # Clean up
+                import os
+                if os.path.exists(cache_file):
+                    os.remove(cache_file)
+
+    def test_cache_expiry(self):
+        """Test BME680 cache expiration after 1 hour"""
+        import json
+        import tempfile
+        
+        with patch.dict("sys.modules", {"bme680": self.bme_module}):
+            from sensor_plugins import BME680Plugin
+
+            # Create a temporary cache file with old timestamp
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+                cache_file = f.name
+                # Write cache with timestamp from 2 hours ago
+                old_cache = {
+                    'gas_baseline': 50000,
+                    'timestamp': time.time() - 7200  # 2 hours ago
+                }
+                json.dump(old_cache, f)
+
+            try:
+                # Create plugin - should not load expired cache
+                plugin = BME680Plugin(burn_in_time=300, cache_file=cache_file)
+                self.assertFalse(plugin.burn_in_complete)
+                self.assertIsNone(plugin.gas_baseline)
+            finally:
+                # Clean up
+                import os
+                if os.path.exists(cache_file):
+                    os.remove(cache_file)
+
+    def test_cache_missing_file(self):
+        """Test BME680 behavior when cache file doesn't exist"""
+        import tempfile
+        
+        with patch.dict("sys.modules", {"bme680": self.bme_module}):
+            from sensor_plugins import BME680Plugin
+
+            # Create a temporary non-existent cache file path
+            with tempfile.NamedTemporaryFile(delete=True, suffix='.json') as f:
+                cache_file = f.name
+            # File is now deleted, so it won't exist
+            
+            # Create plugin with non-existent cache file
+            plugin = BME680Plugin(burn_in_time=300, cache_file=cache_file)
+            self.assertFalse(plugin.burn_in_complete)
+            self.assertIsNone(plugin.gas_baseline)
+
+    def test_cache_invalid_json(self):
+        """Test BME680 behavior with corrupted cache file"""
+        import tempfile
+        
+        with patch.dict("sys.modules", {"bme680": self.bme_module}):
+            from sensor_plugins import BME680Plugin
+
+            # Create a temporary cache file with invalid JSON
+            with tempfile.NamedTemporaryFile(mode='w', delete=False, suffix='.json') as f:
+                cache_file = f.name
+                f.write("invalid json content {")
+
+            try:
+                # Create plugin - should handle invalid cache gracefully
+                plugin = BME680Plugin(burn_in_time=300, cache_file=cache_file)
+                self.assertFalse(plugin.burn_in_complete)
+                self.assertIsNone(plugin.gas_baseline)
+            finally:
+                # Clean up
+                import os
+                if os.path.exists(cache_file):
+                    os.remove(cache_file)
+
+    def test_read_only_cache(self):
+        """Test BME680 read-only cache mode doesn't write to cache"""
+        import tempfile
+        import os
+        
+        with patch.dict("sys.modules", {"bme680": self.bme_module}):
+            from sensor_plugins import BME680Plugin
+
+            # Create a temporary cache file path (file doesn't exist yet)
+            with tempfile.NamedTemporaryFile(delete=True, suffix='.json') as f:
+                cache_file = f.name
+            # File is now deleted
+
+            try:
+                # Create plugin with read_only_cache=True and burn_in_time=0 to complete immediately
+                plugin = BME680Plugin(burn_in_time=0.0, cache_file=cache_file, read_only_cache=True)
+                
+                # Trigger read which would normally save cache after burn-in completes
+                data = plugin.read()
+                
+                # Cache file should not have been created since we're in read-only mode
+                self.assertFalse(os.path.exists(cache_file), 
+                               "Read-only cache mode should not create cache file")
+            finally:
+                # Clean up
+                if os.path.exists(cache_file):
+                    os.remove(cache_file)
+
+    def test_burn_in_data_size_limit(self):
+        """Test that burn_in_data is limited to 50 samples"""
+        with patch.dict("sys.modules", {"bme680": self.bme_module}):
+            from sensor_plugins import BME680Plugin
+
+            plugin = BME680Plugin(burn_in_time=1000)  # Long burn-in time
+            plugin.start_time = time.time()
+            
+            # Simulate collecting 100 readings
+            for _ in range(100):
+                data = plugin.read()
+            
+            # burn_in_data should be limited to 50 samples
+            self.assertLessEqual(len(plugin.burn_in_data), 50)
 
 
 class TestSystemInfoPlugins(unittest.TestCase):
