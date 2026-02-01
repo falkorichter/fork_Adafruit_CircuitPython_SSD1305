@@ -1,0 +1,21 @@
+# SPDX-FileCopyrightText: 2026 Adafruit Industries
+#
+# SPDX-License-Identifier: Unlicense
+
+# Requirements for running the examples
+
+# Core library dependencies (from ../requirements.txt)
+Adafruit-Blinka
+adafruit-circuitpython-busdevice
+adafruit-circuitpython-framebuf
+
+# PIL/Pillow for image operations in examples
+Pillow
+
+# Sensor plugin dependencies
+qwiic-tmp117  # For TMP117 temperature sensor
+adafruit-circuitpython-veml7700  # For VEML7700 light sensor
+bme680  # For BME680 environmental sensor
+
+# Burn-in prevention feature (for ssd1305_stats.py)
+pynput  # For keyboard activity monitoring to prevent OLED burn-in

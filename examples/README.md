@@ -1,6 +1,22 @@
 
 # SSD1305 Examples
 
+## Installation
+
+To run the examples, install the required dependencies:
+
+```bash
+pip install -r examples/requirements.txt
+```
+
+This will install all necessary packages including:
+- Core library dependencies (Adafruit Blinka, etc.)
+- PIL/Pillow for image operations
+- Sensor libraries (TMP117, VEML7700, BME680)
+- pynput for keyboard monitoring (burn-in prevention)
+
+Alternatively, you can install dependencies individually as needed for specific examples.
+
 ## Examples Overview
 
 ### ssd1305_simpletest.py
@@ -54,16 +70,7 @@ python examples/ssd1305_stats.py --blank-timeout 0
 - After the specified timeout period with no keyboard input, the display is blanked
 - Any keyboard press immediately restores the display
 - This helps prevent OLED burn-in from static content
-- Gracefully falls back if `pynput` is not available
-
-**Installation:**
-
-The burn-in prevention feature requires the optional `pynput` library:
-```bash
-pip install pynput
-```
-
-If `pynput` is not installed, the script will still run but the burn-in prevention feature will be disabled with a warning message.
+- Gracefully falls back if `pynput` is not available (see Installation section above)
 
 ### ssd1305_web_simulator.py
 **NEW**: Web-based simulator for testing without hardware!
