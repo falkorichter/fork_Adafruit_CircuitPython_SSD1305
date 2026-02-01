@@ -57,6 +57,7 @@ sensor_plugins/
 - `TMP117Plugin` - Temperature sensor
 - `VEML7700Plugin` - Ambient light sensor
 - `BME680Plugin` - Environmental sensor (temperature, humidity, pressure, gas, air quality)
+  - **Burn-in Caching**: The BME680 sensor requires a burn-in period (default 300 seconds) to establish a baseline for air quality measurements. To avoid this delay on subsequent runs, burn-in data is automatically cached in `examples/bme680_burn_in_cache.json` and reused if less than 1 hour old.
 
 ### Usage
 ```python
@@ -72,6 +73,13 @@ temp_data = tmp117.read()
 light_data = veml7700.read()
 env_data = bme680.read()
 ```
+
+**BME680 Burn-in Cache:**
+- The BME680 plugin automatically saves burn-in calibration data after the initial burn-in period
+- Cached data is stored in `examples/bme680_burn_in_cache.json`
+- Cache is valid for 1 hour, after which a new burn-in is performed
+- Both OLED (`ssd1305_stats.py`) and web simulator (`ssd1305_web_simulator.py`) processes share the same cache
+- To disable caching or use a custom cache location, pass `cache_file` parameter to `BME680Plugin()`
 
 **Note:** The old `sensor_plugin.py` module is maintained for backward compatibility but is deprecated. New code should use the `sensor_plugins` package.
 
