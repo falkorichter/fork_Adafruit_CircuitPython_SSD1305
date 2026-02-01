@@ -152,6 +152,9 @@ ip_address = IPAddressPlugin(check_interval=30.0)
 cpu_load = CPULoadPlugin(check_interval=1.0)
 memory_usage = MemoryUsagePlugin(check_interval=5.0)
 
+# List of all sensors - used for dynamic background update handling
+all_sensors = [tmp117, veml7700, bme680, ip_address, cpu_load, memory_usage]
+
 # Flag to prevent re-entrant signal handler calls (use dict to avoid global statement)
 _cleanup_state = {"in_progress": False}
 
@@ -205,18 +208,23 @@ try:
 
         # Always read sensors that require background updates (e.g., BME680 during burn-in)
         # This ensures continuous operation even when display is off
-        bme_data = bme680.read()
+        background_sensor_data = {}
+        for sensor in all_sensors:
+            if sensor.requires_background_updates:
+                # Read background sensors and store with sensor name as key
+                background_sensor_data[sensor.name] = sensor.read()
         
         if display_should_be_active:
             # Draw a black filled box to clear the image.
             draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
-            # Read remaining sensor data
-            temp_data = tmp117.read()
-            light_data = veml7700.read()
-            ip_data = ip_address.read()
-            cpu_data = cpu_load.read()
-            memory_data = memory_usage.read()
+            # Read remaining sensor data (skip sensors already read for background updates)
+            temp_data = tmp117.read() if not tmp117.requires_background_updates else background_sensor_data.get(tmp117.name)
+            light_data = veml7700.read() if not veml7700.requires_background_updates else background_sensor_data.get(veml7700.name)
+            bme_data = bme680.read() if not bme680.requires_background_updates else background_sensor_data.get(bme680.name)
+            ip_data = ip_address.read() if not ip_address.requires_background_updates else background_sensor_data.get(ip_address.name)
+            cpu_data = cpu_load.read() if not cpu_load.requires_background_updates else background_sensor_data.get(cpu_load.name)
+            memory_data = memory_usage.read() if not memory_usage.requires_background_updates else background_sensor_data.get(memory_usage.name)
 
             # Use plugin format methods
             temp_str = tmp117.format_display(temp_data)
@@ -263,7 +271,10 @@ try:
         # Display is timed out - blank it once when state changes
         elif previous_display_state:
             logger.info("Display blanked due to inactivity")
-            logger.info("Background sensors (BME680) continue running for air quality measurement")
+            # Log which sensors are running in background
+            background_sensors = [s.name for s in all_sensors if s.requires_background_updates]
+            if background_sensors:
+                logger.info(f"Background sensors continue running: {', '.join(background_sensors)}")
             draw.rectangle((0, 0, width, height), outline=0, fill=0)
             disp.image(image)
             disp.show()
