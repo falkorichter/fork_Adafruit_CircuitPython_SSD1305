@@ -13,7 +13,7 @@ adafruit-circuitpython-framebuf
 Pillow
 
 # Sensor plugin dependencies
-qwiic-tmp117  # For TMP117 temperature sensor
+sparkfun-qwiic-tmp117  # For TMP117 temperature sensor
 adafruit-circuitpython-veml7700  # For VEML7700 light sensor
 bme680  # For BME680 environmental sensor
 
