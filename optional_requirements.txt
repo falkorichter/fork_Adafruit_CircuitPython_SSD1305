@@ -2,4 +2,6 @@
 #
 # SPDX-License-Identifier: Unlicense
 
-pynput  # Optional: For keyboard activity monitoring in burn-in prevention
+# Optional dependencies for keyboard activity monitoring in burn-in prevention:
+pynput  # Cross-platform keyboard monitoring (requires X11/display server)
+evdev  # Linux-specific keyboard monitoring (works in headless environments)

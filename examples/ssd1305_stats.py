@@ -31,8 +31,9 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Add parent directory to path to import sensor_plugins
+# Add parent directory to path to import sensor_plugins and display_timeout
 sys.path.insert(0, str(Path(__file__).parent.parent))
+from display_timeout import DisplayTimeoutManager, keyboard_listener
 from sensor_plugins import (
     BME680Plugin,
     CPULoadPlugin,
@@ -41,119 +42,6 @@ from sensor_plugins import (
     TMP117Plugin,
     VEML7700Plugin,
 )
-
-
-class DisplayTimeoutManager:
-    """Manages display timeout for burn-in prevention"""
-
-    def __init__(self, timeout_seconds=10.0, enabled=True):
-        """
-        Initialize the timeout manager
-
-        :param timeout_seconds: Seconds of inactivity before blanking display
-        :param enabled: Whether timeout feature is enabled
-        """
-        self.timeout_seconds = timeout_seconds
-        self.enabled = enabled
-        self.last_activity_time = time.time()
-        self._display_active = True
-        self._lock = threading.Lock()
-
-    def register_activity(self):
-        """Called when keyboard activity is detected"""
-        with self._lock:
-            self.last_activity_time = time.time()
-            was_inactive = not self._display_active
-            self._display_active = True
-            return was_inactive  # Return True if display was off and should be re-activated
-
-    def should_display_be_active(self):
-        """
-        Check if display should be active based on timeout
-
-        :return: True if display should be active, False if it should be blanked
-        """
-        if not self.enabled:
-            return True
-
-        with self._lock:
-            elapsed = time.time() - self.last_activity_time
-            should_be_active = elapsed < self.timeout_seconds
-
-            # Update internal state
-            self._display_active = should_be_active
-
-            return should_be_active
-
-    @property
-    def display_active(self):
-        """Get current display active state"""
-        with self._lock:
-            return self._display_active
-
-
-def keyboard_listener(timeout_manager):
-    """
-    Background thread to monitor keyboard activity using pynput
-
-    :param timeout_manager: DisplayTimeoutManager instance to update on activity
-    """
-    pynput_failed = False
-    try:
-        from pynput import keyboard  # noqa: PLC0415
-
-        def on_press(key):
-            """Called when any key is pressed"""
-            was_inactive = timeout_manager.register_activity()
-            if was_inactive:
-                logger.info("Display reactivated by keyboard input")
-
-        # Start listening to keyboard events
-        logger.info("Starting pynput keyboard listener...")
-        listener = keyboard.Listener(on_press=on_press)
-        listener.start()
-
-        # Check if listener started successfully
-        time.sleep(0.5)
-        if not listener.running:
-            pynput_failed = True
-            logger.warning("pynput listener failed to start (may need X11/display server)")
-            listener.stop()
-        else:
-            logger.info("pynput keyboard listener active")
-            listener.join()
-
-    except ImportError:
-        logger.warning("pynput library not available.")
-        logger.warning("Install with: pip install pynput")
-        pynput_failed = True
-    except Exception as e:
-        logger.warning(f"pynput keyboard monitoring failed: {e}")
-        pynput_failed = True
-
-    # Fallback to stdin monitoring if pynput doesn't work
-    if pynput_failed:
-        logger.info("Falling back to stdin activity monitoring")
-        logger.info("Any keyboard input in this terminal will reset the timeout")
-        try:
-            import select  # noqa: PLC0415
-
-            # Monitor stdin for activity
-            while True:
-                # Check if there's input available on stdin (non-blocking)
-                readable, _, _ = select.select([sys.stdin], [], [], 0.5)
-                if readable:
-                    # Drain the input buffer
-                    try:
-                        sys.stdin.read(1024)
-                    except OSError:
-                        pass
-                    was_inactive = timeout_manager.register_activity()
-                    if was_inactive:
-                        logger.info("Display reactivated by keyboard input")
-        except Exception as e:
-            logger.error(f"Stdin monitoring also failed: {e}")
-            logger.error("Display timeout feature disabled.")
 
 
 # Parse command-line arguments
@@ -169,7 +57,28 @@ parser.add_argument(
     action="store_true",
     help="Disable automatic display blanking",
 )
+parser.add_argument(
+    "--input-method",
+    type=str,
+    default="evdev",
+    choices=["auto", "pynput", "evdev", "file", "stdin"],
+    help=(
+        "Input detection method: evdev (default, Linux), auto (try all), pynput (X11), "
+        "file (timestamps), stdin (terminal)"
+    ),
+)
+parser.add_argument(
+    "--debug",
+    action="store_true",
+    help="Enable debug logging (shows keyboard keystroke detection)",
+)
 args = parser.parse_args()
+
+# Set logging level based on debug flag
+if args.debug:
+    logging.getLogger().setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+    logger.debug("Debug logging enabled")
 
 # Initialize timeout manager
 timeout_enabled = not args.no_blank and args.blank_timeout > 0
@@ -178,10 +87,13 @@ timeout_manager = DisplayTimeoutManager(timeout_seconds=args.blank_timeout, enab
 # Start keyboard monitoring thread if timeout is enabled
 if timeout_enabled:
     keyboard_thread = threading.Thread(
-        target=keyboard_listener, args=(timeout_manager,), daemon=True
+        target=keyboard_listener, args=(timeout_manager, args.input_method), daemon=True
     )
     keyboard_thread.start()
-    logger.info(f"Display blanking enabled: {args.blank_timeout}s timeout (any key to reactivate)")
+    logger.info(
+        f"Display blanking enabled: {args.blank_timeout}s timeout "
+        f"(method: {args.input_method})"
+    )
 else:
     logger.info("Display blanking disabled")
 

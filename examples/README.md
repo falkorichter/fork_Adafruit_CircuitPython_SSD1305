@@ -47,7 +47,7 @@ The stats display now supports automatic display blanking to prevent OLED burn-i
 
 **Usage:**
 
-Default behavior (10-second timeout):
+Default behavior (10-second timeout with evdev input method):
 ```bash
 python examples/ssd1305_stats.py
 ```
@@ -64,15 +64,119 @@ python examples/ssd1305_stats.py --no-blank
 python examples/ssd1305_stats.py --blank-timeout 0
 ```
 
+Select specific input detection method:
+```bash
+# Use auto-detect to try all methods (pynput → evdev → file → stdin)
+python examples/ssd1305_stats.py --input-method auto
+
+# Use file timestamp monitoring (universal fallback)
+python examples/ssd1305_stats.py --input-method file
+
+# Use pynput (requires X11/display server)
+python examples/ssd1305_stats.py --input-method pynput
+
+# Use stdin (only works when running in terminal)
+python examples/ssd1305_stats.py --input-method stdin
+```
+
+Enable debug logging to see keystroke detection:
+```bash
+python examples/ssd1305_stats.py --debug
+```
+
+**Input Detection Methods:**
+
+The display supports four different keyboard input detection methods:
+
+1. **evdev** (DEFAULT): Linux-specific, reads from `/dev/input/event*`
+   - Works on Linux systems without X11
+   - Requires: `pip install evdev`
+   - May need permission to access `/dev/input` (add user to `input` group)
+   - Best for headless Raspberry Pi setups
+   - **This is now the default method**
+
+2. **pynput** (Option A): Cross-platform keyboard monitoring using the pynput library
+   - Works on systems with X11/display server
+   - Requires: `pip install pynput`
+   - Best for desktop environments
+
+3. **file** (Option B): File timestamp monitoring of `/dev/input` devices
+   - Universal fallback that works on most Linux systems
+   - No additional dependencies required
+   - Monitors file access times to detect input activity
+   - Best for systems where evdev doesn't work
+
+4. **stdin** (Option C): Terminal input monitoring
+   - Only works when running interactively in a terminal
+   - No additional dependencies required
+   - Fallback for testing purposes
+
+**Auto-detect mode**: Use `--input-method auto` to try all methods in order until one works:
+`pynput` → `evdev` → `file` → `stdin`
+
 **How It Works:**
 
-- The display monitors keyboard activity in the background
-- First tries to use the `pynput` library for cross-platform keyboard monitoring
-- If `pynput` doesn't work (e.g., no X11/display server), automatically falls back to monitoring terminal input
+- The display monitors keyboard activity in the background using one of the detection methods above
 - After the specified timeout period with no keyboard input, the display is blanked
 - Any keyboard press immediately restores the display
 - This helps prevent OLED burn-in from static content
 - Works in SSH sessions, systemd services, and other headless environments
+- Use `--debug` flag to see which keys are being detected for troubleshooting
+
+#### Test Results Matrix
+
+The following matrix shows the test results for each input detection method across different environments:
+
+| Input Method | Terminal (Manual) | Systemd Service | Desktop (X11) | SSH Session | Status | Notes |
+|--------------|-------------------|-----------------|---------------|-------------|--------|-------|
+| **evdev** (default) | ✅ Working | ✅ Working | ⚠️ Untested | ⚠️ Untested | **Recommended** | Requires evdev package and input group permissions |
+| **pynput** | ⚠️ Untested | ❌ Fails | ⚠️ Untested | ⚠️ Untested | Not recommended | Requires X11/display server |
+| **file** | ❌ Unreliable | ⚠️ Untested | ⚠️ Untested | ⚠️ Untested | Fallback only | File timestamp monitoring can be inconsistent |
+| **stdin** | ⚠️ Untested | ❌ Fails | ⚠️ Untested | ⚠️ Untested | Testing only | Only works in interactive terminal |
+| **auto** | ⚠️ Untested | ⚠️ Untested | ⚠️ Untested | ⚠️ Untested | Available | Tries all methods until one works |
+
+**Legend:**
+- ✅ **Working**: Tested and confirmed to work reliably
+- ❌ **Fails**: Tested and does not work in this environment
+- ⚠️ **Untested**: Not yet tested in this environment
+
+**Test Environment:**
+- OS: Raspberry Pi OS (Linux)
+- Hardware: Raspberry Pi
+- Python: 3.x
+- Tester: @falkorichter
+
+**Recommendation:** Use `evdev` method (now the default) for Raspberry Pi and headless Linux systems.
+
+**Reusable Module:**
+
+The burn-in prevention functionality has been extracted into a reusable `display_timeout` module that can be used in other projects:
+
+```python
+from display_timeout import DisplayTimeoutManager, keyboard_listener
+import threading
+
+# Create timeout manager
+timeout_manager = DisplayTimeoutManager(timeout_seconds=10.0, enabled=True)
+
+# Start keyboard monitoring in background thread
+keyboard_thread = threading.Thread(
+    target=keyboard_listener, 
+    args=(timeout_manager, "auto"),  # method: auto, pynput, evdev, file, or stdin
+    daemon=True
+)
+keyboard_thread.start()
+
+# In your main loop
+if timeout_manager.should_display_be_active():
+    # Update display
+    pass
+else:
+    # Blank display
+    pass
+```
+
+See `display_timeout.py` in the repository root for full documentation.
 
 ### ssd1305_web_simulator.py
 **NEW**: Web-based simulator for testing without hardware!
@@ -137,7 +241,7 @@ env_data = bme680.read()
 
 ## System Service Setup
 
-When running as a systemd service, you can configure the burn-in prevention timeout:
+When running as a systemd service, you can configure the burn-in prevention timeout and input method:
 
 `sudo nano /etc/logrotate.d/ssd1305_stats`
 
@@ -163,10 +267,14 @@ After=multi-user.target
 [Service]
 Type=simple
 User=root
-# Default (10-second timeout):
+# Default (10-second timeout with evdev method):
 ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py
 # Custom timeout (30 seconds):
 # ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --blank-timeout 30
+# With auto-detect method (tries all methods):
+# ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --input-method auto
+# With debug logging to troubleshoot input detection:
+# ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --debug
 # Disable burn-in prevention:
 # ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --no-blank
 Restart=on-failure
@@ -177,12 +285,35 @@ StandardError=append:/var/log/ssd1305_stats.log
 WantedBy=multi-user.target
 ```
 
-**Note:** Make sure `pynput` is installed in the Python environment for burn-in prevention to work:
+**Input Method for Systemd Services:**
+
+For headless systems running as systemd services, evdev is now the default method:
+```bash
+# Install evdev (required)
+/home/user/env/bin/pip install evdev
+
+# Add user to input group (required for evdev to access /dev/input)
+sudo usermod -a -G input root
+```
+
+If evdev doesn't work on your system, you can use the auto-detect or file timestamp methods:
+```bash
+# Use auto-detect (tries all methods until one works)
+# Add --input-method auto to the ExecStart line
+
+# Or use file timestamp method (no dependencies, no special permissions needed)
+# Add --input-method file to the ExecStart line
+```
+
+**Note:** If using `pynput`, install it in the Python environment:
 ```bash
 /home/user/env/bin/pip install pynput
 ```
 
-Test
+However, `pynput` requires X11/display server and won't work in headless environments.
+
+**Testing the Service:**
+
 Reload the daemon:
 `sudo systemctl daemon-reload`
 
@@ -191,3 +322,6 @@ Enable the service (this ensures it runs on boot):
 
 Start the service now (to test it):
 `sudo systemctl start ssd1305_stats.service`
+
+Check logs to see which input method is being used:
+`tail -f /var/log/ssd1305_stats.log`
