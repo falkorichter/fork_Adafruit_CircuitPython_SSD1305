@@ -254,12 +254,6 @@ def cleanup_display(sig=None, frame=None):
     _cleanup_state["in_progress"] = True
     logger.info("Cleaning up display...")
 
-        print("\nForce exit...")
-        sys.exit(1)
-    
-    _cleanup_state["in_progress"] = True
-    print("\nCleaning up display...")
-    
     try:
         # Clear display by drawing all black
         draw.rectangle((0, 0, width, height), outline=0, fill=0)
@@ -270,11 +264,6 @@ def cleanup_display(sig=None, frame=None):
         # If display cleanup fails, still exit gracefully
         logger.error(f"Error clearing display during cleanup: {e}")
         logger.info("Exiting anyway.")
-        print("Display cleared. Exiting.")
-    except Exception as e:
-        # If display cleanup fails, still exit gracefully
-        print(f"Error clearing display during cleanup: {e}")
-        print("Exiting anyway.")
     finally:
         sys.exit(0)
 
@@ -367,60 +356,6 @@ try:
             disp.show()
 
         previous_display_state = display_should_be_active
-        
-        # Draw a black filled box to clear the image.
-        draw.rectangle((0, 0, width, height), outline=0, fill=0)
-
-        # Read sensor data using plugins
-        temp_data = tmp117.read()
-        light_data = veml7700.read()
-        bme_data = bme680.read()
-        ip_data = ip_address.read()
-        cpu_data = cpu_load.read()
-        memory_data = memory_usage.read()
-
-        # Use plugin format methods
-        temp_str = tmp117.format_display(temp_data)
-        light_str = veml7700.format_display(light_data)
-        air_quality_str = bme680.format_display(bme_data)
-
-        # Get system info from plugins
-        ip = ip_data.get("ip_address", "n/a")
-        cpu = cpu_data.get("cpu_load", "n/a")
-        memory = memory_data.get("memory_usage", "n/a")
-        
-        # Calculate FPS
-        current_time = time.time()
-        if last_frame_time is not None:
-            frame_time = current_time - last_frame_time
-            frame_times.append(frame_time)
-            if len(frame_times) > max_frame_times:
-                frame_times.pop(0)
-        
-        fps = 0
-        if len(frame_times) > 0:
-            avg_frame_time = sum(frame_times) / len(frame_times)
-            fps = 1.0 / avg_frame_time
-
-        # Write four lines of text on the display.
-        draw.text((x, top + 0), f"IP: {ip} FPS:{fps:.0f}", font=font, fill=255)
-        draw.text((x, top + 8), f"{temp_str} CPU: {cpu} {light_str}", font=font, fill=255)
-        draw.text((x, top + 16), f"Mem: {memory}", font=font, fill=255)
-        draw.text((x, top + 25), air_quality_str, font=font, fill=255)
-
-        # Display image.
-        disp.image(image)
-        disp.show()
-        
-        # Track frame timing
-        frame_end = time.time()
-        display_time = frame_end - frame_start
-        last_frame_time = current_time
-        
-        # Log performance every 10 frames
-        if len(frame_times) > 0 and len(frame_times) % 10 == 0:
-            print(f"Display update: {display_time*1000:.1f}ms | FPS: {fps:.1f}")
-        
         time.sleep(0.1)
 except KeyboardInterrupt:
     # This is a backup in case signal handler doesn't trigger
