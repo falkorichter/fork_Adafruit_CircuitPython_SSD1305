@@ -1,5 +1,5 @@
 """
-Web server to visualize SSD1305 display output with mocked sensors
+Web server to visualize SSD1305 display output with optional mocked sensors
 """
 
 import io
@@ -8,6 +8,7 @@ import sys
 import time
 from http.server import BaseHTTPRequestHandler, HTTPServer
 from pathlib import Path
+from urllib.parse import parse_qs, urlparse
 
 from PIL import Image, ImageDraw, ImageFont
 
@@ -93,18 +94,23 @@ class MockBME680:
         return True
 
 
-# Replace actual sensor imports with mocks
-sys.modules["qwiic_tmp117"] = type(sys)("qwiic_tmp117")
-sys.modules["qwiic_tmp117"].QwiicTMP117 = MockTMP117
-sys.modules["adafruit_veml7700"] = type(sys)("adafruit_veml7700")
-sys.modules["adafruit_veml7700"].VEML7700 = MockVEML7700
-sys.modules["bme680"] = type(sys)("bme680")
-for attr in dir(MockBME680):
-    if not attr.startswith("_"):
-        setattr(sys.modules["bme680"], attr, getattr(MockBME680, attr))
-
 # Add parent directory to path to import sensor_plugins
 sys.path.insert(0, str(Path(__file__).parent.parent))
+
+
+def setup_mocks():
+    """Setup mock sensor modules"""
+    # Replace actual sensor imports with mocks
+    sys.modules["qwiic_tmp117"] = type(sys)("qwiic_tmp117")
+    sys.modules["qwiic_tmp117"].QwiicTMP117 = MockTMP117
+    sys.modules["adafruit_veml7700"] = type(sys)("adafruit_veml7700")
+    sys.modules["adafruit_veml7700"].VEML7700 = MockVEML7700
+    sys.modules["bme680"] = type(sys)("bme680")
+    for attr in dir(MockBME680):
+        if not attr.startswith("_"):
+            setattr(sys.modules["bme680"], attr, getattr(MockBME680, attr))
+
+
 from sensor_plugins import (
     BME680Plugin,
     CPULoadPlugin,
@@ -160,13 +166,24 @@ class DisplayServer(BaseHTTPRequestHandler):
     cpu_load = None
     memory_usage = None
     font = None
+    use_mocks = False  # Default to real sensors
 
     def do_GET(self):
         """Handle GET requests"""
-        # Parse the path to remove query parameters
-        path = self.path.split('?')[0]
+        # Parse the path and query parameters
+        parsed_url = urlparse(self.path)
+        path = parsed_url.path
+        query_params = parse_qs(parsed_url.query)
         
         if path == "/":
+            # Check if use_mocks parameter is present
+            use_mocks_param = query_params.get('use_mocks', ['false'])[0].lower()
+            self.use_mocks = use_mocks_param == 'true'
+            
+            self.send_response(200)
+            self.send_header("Content-type", "text/html")
+            self.end_headers()
+            self.wfile.write(self.get_html().encode())
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
@@ -222,17 +239,37 @@ class DisplayServer(BaseHTTPRequestHandler):
         # Load HTML template from file
         template_path = Path(__file__).parent / "web_simulator_template.html"
         with open(template_path) as f:
-            return f.read()
+            html = f.read()
+        
+        # Inject the use_mocks value and update mode text
+        mode_text = "mocked sensors" if self.use_mocks else "real sensors"
+        html = html.replace('const useMocks = false;', f'const useMocks = {str(self.use_mocks).lower()};')
+        html = html.replace('<span id="mode-text">real sensors</span>', f'<span id="mode-text">{mode_text}</span>')
+        
+        return html
 
     def log_message(self, format, *args):
         """Suppress default logging"""
         pass
 
 
-def run_server(port=8000):
-    """Run the display server"""
+def run_server(port=8000, use_mocks=False):
+    """Run the display server
+    
+    Args:
+        port: Port to run server on
+        use_mocks: If True, use mocked sensors. If False, use real sensors.
+    """
+    # Setup mocks if requested
+    if use_mocks:
+        setup_mocks()
+        print("Using mocked sensors")
+    else:
+        print("Using real sensors (will show 'n/a' if not connected)")
+    
     # Initialize display simulator
     DisplayServer.display = DisplaySimulator(128, 32)
+    DisplayServer.use_mocks = use_mocks
 
     # Load font
     try:
@@ -254,6 +291,7 @@ def run_server(port=8000):
     server_address = ("", port)
     httpd = HTTPServer(server_address, DisplayServer)
     print(f"Server running on http://localhost:{port}")
+    print("Use ?use_mocks=true in the URL to enable mocked sensors")
     print("Press Ctrl+C to stop")
     try:
         httpd.serve_forever()
@@ -263,4 +301,11 @@ def run_server(port=8000):
 
 
 if __name__ == "__main__":
-    run_server()
+    import argparse
+    
+    parser = argparse.ArgumentParser(description='SSD1305 Web Simulator')
+    parser.add_argument('--port', type=int, default=8000, help='Port to run server on (default: 8000)')
+    parser.add_argument('--use-mocks', action='store_true', help='Use mocked sensors instead of real hardware')
+    args = parser.parse_args()
+    
+    run_server(port=args.port, use_mocks=args.use_mocks)

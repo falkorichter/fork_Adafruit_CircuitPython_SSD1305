@@ -61,14 +61,21 @@
                     and show "n/a" when not available</li>
                 <li><strong>Plugin system:</strong> Each sensor is a modular plugin that handles
                     its own initialization and error handling</li>
-                <li><strong>Mocked hardware:</strong> This demo uses simulated sensors for
-                    testing without physical hardware</li>
+                <li id="sensor-mode"><strong>Sensor mode:</strong> Using <span id="mode-text">real sensors</span></li>
                 <li><strong>Auto-refresh:</strong> Display updates automatically
                     every 2000ms</li>
             </ul>
+            <div style="margin-top: 15px; padding: 10px; background-color: #f9f9f9; border-left: 3px solid #2c5aa0;">
+                <strong>Current mode:</strong> <span id="mode-text">real sensors</span><br>
+                <small>To use mocked sensors, restart the server with: <code>python ssd1305_web_simulator.py --use-mocks</code></small>
+            </div>
         </div>
     </div>
     <script>
+        // Check server mode (mocked or real sensors)
+        // Note: Changing this requires restarting the server
+        const useMocks = false;  // This will be set by the server
+        
         // Auto-refresh the display image
         function refreshDisplay() {
             var img = document.getElementById('display');
