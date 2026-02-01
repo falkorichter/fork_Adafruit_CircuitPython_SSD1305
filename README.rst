@@ -97,6 +97,55 @@ API documentation for this library can be found on `Read the Docs <https://docs.
 
 For information on building library documentation, please check out `this guide <https://learn.adafruit.com/creating-and-sharing-a-circuitpython-library/sharing-our-docs-on-readthedocs#sphinx-5-1>`_.
 
+Web Simulator
+=============
+
+The library includes a high-performance web simulator for testing and development without physical hardware.
+
+Features
+--------
+
+* **Real-time Display Simulation**: View SSD1305 display output in your browser
+* **Hot-pluggable Sensors**: Automatic sensor detection with graceful fallback
+* **Mock Mode**: Test without hardware using simulated sensor data
+* **WebSocket Support**: Push updates for minimal latency (optional)
+* **Dynamic Refresh Rate**: Automatically adjusts to match actual FPS
+* **Performance Metrics**: Detailed timing breakdown for optimization
+* **Static Benchmark**: Measure baseline server performance
+
+Quick Start
+-----------
+
+.. code-block:: shell
+
+    # Install optional dependencies
+    pip install Pillow psutil
+    
+    # For WebSocket support (optional)
+    pip install websockets
+    
+    # Run with mocked sensors
+    python examples/ssd1305_web_simulator.py --use-mocks
+    
+    # Run with WebSocket push updates
+    python examples/ssd1305_web_simulator.py --use-mocks --enable-websocket
+    
+    # Open browser to http://localhost:8000
+    # Benchmark page at http://localhost:8000/benchmark
+
+Performance
+-----------
+
+See `PERFORMANCE.md <PERFORMANCE.md>`_ for detailed performance information, benchmarking results, and optimization tips.
+
+**Key Performance Features:**
+
+* Client-side image scaling for 12x faster PNG delivery
+* Background sensor data collection (non-blocking I/O)
+* Cached sensor reads to minimize I2C overhead
+* WebSocket push updates (~5ms latency vs 2000ms polling)
+* Automatic refresh rate optimization based on actual FPS
+
 Contributing
 ============
 
