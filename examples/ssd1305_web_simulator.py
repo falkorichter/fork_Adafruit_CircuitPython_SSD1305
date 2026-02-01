@@ -191,6 +191,48 @@ class MockEvdevEcodes:
     KEY_SPACE = 57
 
 
+# Character to key code mapping for keyboard simulation
+CHAR_TO_KEYCODE = {
+    "a": MockEvdevEcodes.KEY_A,
+    "b": MockEvdevEcodes.KEY_B,
+    "c": MockEvdevEcodes.KEY_C,
+    "d": MockEvdevEcodes.KEY_D,
+    "e": MockEvdevEcodes.KEY_E,
+    "f": MockEvdevEcodes.KEY_F,
+    "g": MockEvdevEcodes.KEY_G,
+    "h": MockEvdevEcodes.KEY_H,
+    "i": MockEvdevEcodes.KEY_I,
+    "j": MockEvdevEcodes.KEY_J,
+    "k": MockEvdevEcodes.KEY_K,
+    "l": MockEvdevEcodes.KEY_L,
+    "m": MockEvdevEcodes.KEY_M,
+    "n": MockEvdevEcodes.KEY_N,
+    "o": MockEvdevEcodes.KEY_O,
+    "p": MockEvdevEcodes.KEY_P,
+    "q": MockEvdevEcodes.KEY_Q,
+    "r": MockEvdevEcodes.KEY_R,
+    "s": MockEvdevEcodes.KEY_S,
+    "t": MockEvdevEcodes.KEY_T,
+    "u": MockEvdevEcodes.KEY_U,
+    "v": MockEvdevEcodes.KEY_V,
+    "w": MockEvdevEcodes.KEY_W,
+    "x": MockEvdevEcodes.KEY_X,
+    "y": MockEvdevEcodes.KEY_Y,
+    "z": MockEvdevEcodes.KEY_Z,
+    "0": MockEvdevEcodes.KEY_0,
+    "1": MockEvdevEcodes.KEY_1,
+    "2": MockEvdevEcodes.KEY_2,
+    "3": MockEvdevEcodes.KEY_3,
+    "4": MockEvdevEcodes.KEY_4,
+    "5": MockEvdevEcodes.KEY_5,
+    "6": MockEvdevEcodes.KEY_6,
+    "7": MockEvdevEcodes.KEY_7,
+    "8": MockEvdevEcodes.KEY_8,
+    "9": MockEvdevEcodes.KEY_9,
+    " ": MockEvdevEcodes.KEY_SPACE,
+}
+
+
 # Add parent directory to path to import sensor_plugins
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
@@ -224,6 +266,35 @@ from sensor_plugins import (
     TMP117Plugin,
     VEML7700Plugin,
 )
+
+
+def create_display_update_helper(display_server_class):
+    """Create a helper object that can call DisplayServer instance methods.
+
+    This is needed because DisplayServer methods like update_display() use
+    self.display, self.tmp117, etc., which are class attributes accessed via instance.
+    """
+    class DisplayUpdateHelper:
+        """Helper to access DisplayServer rendering methods"""
+        display = display_server_class.display
+        tmp117 = display_server_class.tmp117
+        veml7700 = display_server_class.veml7700
+        bme680 = display_server_class.bme680
+        keyboard = display_server_class.keyboard
+        ip_address = display_server_class.ip_address
+        cpu_load = display_server_class.cpu_load
+        memory_usage = display_server_class.memory_usage
+        font = display_server_class.font
+
+    helper = DisplayUpdateHelper()
+    # Bind DisplayServer methods to this helper instance
+    helper.update_display = display_server_class.update_display.__get__(
+        helper, DisplayUpdateHelper
+    )
+    helper._read_fresh_sensor_data = display_server_class._read_fresh_sensor_data.__get__(
+        helper, DisplayUpdateHelper
+    )
+    return helper
 
 
 class DisplaySimulator:
@@ -694,48 +765,7 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
                 char = demo_text[index % len(demo_text)]
                 index += 1
 
-                # Map character to key code
-                key_map_reverse = {
-                    "a": MockEvdevEcodes.KEY_A,
-                    "b": MockEvdevEcodes.KEY_B,
-                    "c": MockEvdevEcodes.KEY_C,
-                    "d": MockEvdevEcodes.KEY_D,
-                    "e": MockEvdevEcodes.KEY_E,
-                    "f": MockEvdevEcodes.KEY_F,
-                    "g": MockEvdevEcodes.KEY_G,
-                    "h": MockEvdevEcodes.KEY_H,
-                    "i": MockEvdevEcodes.KEY_I,
-                    "j": MockEvdevEcodes.KEY_J,
-                    "k": MockEvdevEcodes.KEY_K,
-                    "l": MockEvdevEcodes.KEY_L,
-                    "m": MockEvdevEcodes.KEY_M,
-                    "n": MockEvdevEcodes.KEY_N,
-                    "o": MockEvdevEcodes.KEY_O,
-                    "p": MockEvdevEcodes.KEY_P,
-                    "q": MockEvdevEcodes.KEY_Q,
-                    "r": MockEvdevEcodes.KEY_R,
-                    "s": MockEvdevEcodes.KEY_S,
-                    "t": MockEvdevEcodes.KEY_T,
-                    "u": MockEvdevEcodes.KEY_U,
-                    "v": MockEvdevEcodes.KEY_V,
-                    "w": MockEvdevEcodes.KEY_W,
-                    "x": MockEvdevEcodes.KEY_X,
-                    "y": MockEvdevEcodes.KEY_Y,
-                    "z": MockEvdevEcodes.KEY_Z,
-                    "0": MockEvdevEcodes.KEY_0,
-                    "1": MockEvdevEcodes.KEY_1,
-                    "2": MockEvdevEcodes.KEY_2,
-                    "3": MockEvdevEcodes.KEY_3,
-                    "4": MockEvdevEcodes.KEY_4,
-                    "5": MockEvdevEcodes.KEY_5,
-                    "6": MockEvdevEcodes.KEY_6,
-                    "7": MockEvdevEcodes.KEY_7,
-                    "8": MockEvdevEcodes.KEY_8,
-                    "9": MockEvdevEcodes.KEY_9,
-                    " ": MockEvdevEcodes.KEY_SPACE,
-                }
-
-                key_code = key_map_reverse.get(char)
+                key_code = CHAR_TO_KEYCODE.get(char)
                 if key_code:
                     # Simulate key press event
                     MockEvdevDevice.simulate_keypress(MockEvdevEcodes.EV_KEY, key_code, 1)
@@ -745,7 +775,7 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
         print("Started keyboard simulation thread (demo mode)")
 
     # Start WebSocket server if enabled and available
-    if enable_websocket and WEBSOCKETS_AVAILABLE:
+    if enable_websocket and WEBSOCKETS_AVAILABLE:  # noqa: PLR1702
 
         async def websocket_handler(websocket):
             """Handle WebSocket connections"""
@@ -754,8 +784,13 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
             num_clients = len(DisplayServer.websocket_clients)
             print(f"WebSocket client connected. Total clients: {num_clients}")
 
+            # Create helper to access display rendering methods
+            # Reuse this instance for the lifetime of the WebSocket connection
+            display_helper = create_display_update_helper(DisplayServer)
+
             try:
                 # Send initial image
+                display_helper.update_display()
                 png_bytes = DisplayServer.display.get_image_bytes()
                 await websocket.send(
                     json.dumps(
@@ -763,15 +798,46 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
                     )
                 )
 
-                # Keep connection alive and send updates
-                while True:
-                    await asyncio.sleep(0.5)  # Send updates every 500ms
-                    png_bytes = DisplayServer.display.get_image_bytes()
-                    await websocket.send(
-                        json.dumps(
-                            {"type": "image", "data": base64.b64encode(png_bytes).decode("utf-8")}
+                # Create tasks for sending updates and receiving messages
+                async def send_updates():
+                    """Send display updates periodically"""
+                    while True:
+                        await asyncio.sleep(0.5)  # Send updates every 500ms
+                        display_helper.update_display()
+                        png_bytes = DisplayServer.display.get_image_bytes()
+                        await websocket.send(
+                            json.dumps(
+                                {
+                                    "type": "image",
+                                    "data": base64.b64encode(png_bytes).decode("utf-8"),
+                                }
+                            )
                         )
-                    )
+
+                async def receive_messages():
+                    """Receive and process messages from client"""
+                    async for message in websocket:
+                        try:
+                            data = json.loads(message)
+                            if data.get("type") == "keypress":
+                                key = data.get("key", "")
+                                if key and use_mocks:
+                                    key_code = CHAR_TO_KEYCODE.get(key.lower())
+                                    if key_code:
+                                        # Simulate key press event
+                                        MockEvdevDevice.simulate_keypress(
+                                            MockEvdevEcodes.EV_KEY, key_code, 1
+                                        )
+                                        print(f"WebSocket keyboard input: '{key}'")
+                                        # Force immediate sensor cache update
+                                        with DisplayServer.sensor_data_lock:
+                                            DisplayServer.cached_sensor_data = None
+                        except json.JSONDecodeError:
+                            pass
+
+                # Run both tasks concurrently
+                await asyncio.gather(send_updates(), receive_messages())
+
             except websockets.exceptions.ConnectionClosed:
                 pass
             finally:

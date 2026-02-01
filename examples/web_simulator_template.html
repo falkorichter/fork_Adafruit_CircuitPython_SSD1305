@@ -75,6 +75,9 @@
                 FPS: <span id="fps-counter">--</span> | 
                 Mode: <span id="connection-mode">Polling</span>
             </div>
+            <div id="keyboard-info" style="margin-top: 10px; color: #2c5aa0; font-size: 12px; display: none;">
+                <strong>Keyboard enabled:</strong> Type any key to see it on the display
+            </div>
         </div>
         <div class="info">
             <h2>Performance Metrics</h2>
@@ -139,6 +142,11 @@
                     console.log('WebSocket connected');
                     document.getElementById('connection-mode').textContent = 'WebSocket Push';
                     document.getElementById('update-mode').textContent = 'WebSocket push updates';
+                    
+                    // Show keyboard info when using mocks
+                    if (useMocks) {
+                        document.getElementById('keyboard-info').style.display = 'block';
+                    }
                     
                     // Stop polling when WebSocket is active
                     if (refreshIntervalId) {
@@ -222,6 +230,30 @@
             document.getElementById('update-mode').textContent = updateModeText;
             document.getElementById('refresh-interval').textContent = currentRefreshInterval;
         }
+        
+        // Send keyboard input via WebSocket
+        function sendKeypress(key) {
+            if (websocket && websocket.readyState === WebSocket.OPEN && useMocks) {
+                websocket.send(JSON.stringify({
+                    type: 'keypress',
+                    key: key
+                }));
+            }
+        }
+        
+        // Capture keyboard input when using WebSocket with mocks
+        window.addEventListener('keydown', function(event) {
+            // Only send if WebSocket is connected and we're using mocks
+            if (websocket && websocket.readyState === WebSocket.OPEN && useMocks) {
+                // Get the character
+                const key = event.key;
+                // Only send alphanumeric and space
+                if (key.length === 1 && /[a-zA-Z0-9 ]/.test(key)) {
+                    sendKeypress(key);
+                    event.preventDefault();  // Prevent default browser behavior
+                }
+            }
+        });
         
         // Load image immediately on page load
         window.addEventListener('DOMContentLoaded', function() {
