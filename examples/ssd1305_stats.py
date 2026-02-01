@@ -92,21 +92,28 @@ class DisplayTimeoutManager:
             return self._display_active
 
 
-def keyboard_listener(timeout_manager):
+def pynput_listener(timeout_manager):
     """
-    Background thread to monitor keyboard activity using pynput
+    Monitor keyboard activity using pynput (Option A)
+    Works on systems with X11/display server
 
     :param timeout_manager: DisplayTimeoutManager instance to update on activity
     """
-    pynput_failed = False
     try:
         from pynput import keyboard  # noqa: PLC0415
 
         def on_press(key):
             """Called when any key is pressed"""
+            # Log the keystroke for debugging
+            try:
+                key_name = key.char if hasattr(key, 'char') else str(key)
+            except AttributeError:
+                key_name = str(key)
+            logger.debug(f"Key pressed (pynput): {key_name}")
+
             was_inactive = timeout_manager.register_activity()
             if was_inactive:
-                logger.info("Display reactivated by keyboard input")
+                logger.info(f"Display reactivated by keyboard input (pynput): {key_name}")
 
         # Start listening to keyboard events
         logger.info("Starting pynput keyboard listener...")
@@ -116,44 +123,240 @@ def keyboard_listener(timeout_manager):
         # Check if listener started successfully
         time.sleep(0.5)
         if not listener.running:
-            pynput_failed = True
             logger.warning("pynput listener failed to start (may need X11/display server)")
             listener.stop()
-        else:
-            logger.info("pynput keyboard listener active")
-            listener.join()
+            return False
+
+        logger.info("pynput keyboard listener active")
+        listener.join()
+        return True
 
     except ImportError:
-        logger.warning("pynput library not available.")
-        logger.warning("Install with: pip install pynput")
-        pynput_failed = True
+        logger.warning("pynput library not available. Install with: pip install pynput")
+        return False
     except Exception as e:
         logger.warning(f"pynput keyboard monitoring failed: {e}")
-        pynput_failed = True
+        return False
 
-    # Fallback to stdin monitoring if pynput doesn't work
-    if pynput_failed:
-        logger.info("Falling back to stdin activity monitoring")
-        logger.info("Any keyboard input in this terminal will reset the timeout")
+
+def _is_keyboard_device(device):
+    """Check if an evdev device is a keyboard"""
+    caps = device.capabilities(verbose=False)
+    # Check if device has key event capability (EV_KEY = 1)
+    if 1 not in caps:
+        return False
+    # Check if it has actual keyboard keys (not just power button, etc.)
+    keys = caps[1]
+    # Look for common keyboard keys (A-Z range is 30-38, etc.)
+    return any(k in range(1, 128) for k in keys)
+
+
+def _find_keyboard_devices(evdev):
+    """Find all keyboard devices using evdev"""
+    devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+    keyboards = []
+    for device in devices:
+        if _is_keyboard_device(device):
+            keyboards.append(device)
+            logger.info(f"Found keyboard device: {device.name} ({device.path})")
+    return keyboards
+
+
+def evdev_listener(timeout_manager):
+    """
+    Monitor keyboard activity using evdev (Option B)
+    Works on Linux systems, reads from /dev/input/event*
+
+    :param timeout_manager: DisplayTimeoutManager instance to update on activity
+    """
+    try:
+        import select  # noqa: PLC0415
+
+        import evdev  # noqa: PLC0415
+
+        logger.info("Starting evdev keyboard listener...")
+
+        keyboards = _find_keyboard_devices(evdev)
+        if not keyboards:
+            logger.warning("No keyboard devices found via evdev")
+            return False
+
+        logger.info(f"Monitoring {len(keyboards)} keyboard device(s) via evdev")
+
+        # Monitor all keyboard devices
+        while True:
+            # Use select to wait for events from any keyboard
+            r, w, x = select.select(keyboards, [], [], 0.5)
+            for device in r:
+                try:
+                    # Read events
+                    for event in device.read():
+                        # Key press event (EV_KEY, value=1 is press, value=0 is release)
+                        if event.type == evdev.ecodes.EV_KEY and event.value in {0, 1}:
+                            # Log the keystroke for debugging
+                            key_name = evdev.ecodes.KEY[event.code] if event.code in evdev.ecodes.KEY else f"code:{event.code}"
+                            logger.debug(
+                                f"Key {'pressed' if event.value == 1 else 'released'} "
+                                f"(evdev): {key_name}"
+                            )
+
+                            was_inactive = timeout_manager.register_activity()
+                            if was_inactive:
+                                logger.info(
+                                    f"Display reactivated by keyboard input "
+                                    f"(evdev: {device.name}, key: {key_name})"
+                                )
+                            break  # Only register once per batch of events
+                except OSError:
+                    # Device disconnected
+                    pass
+
+    except ImportError:
+        logger.warning("evdev library not available. Install with: pip install evdev")
+        return False
+    except PermissionError:
+        logger.error("Permission denied accessing /dev/input devices.")
+        logger.error("Try running with sudo or add user to 'input' group:")
+        logger.error("  sudo usermod -a -G input $USER")
+        return False
+    except Exception as e:
+        logger.warning(f"evdev keyboard monitoring failed: {e}")
+        return False
+
+
+def _check_input_device_activity(input_dir, last_check_time, timeout_manager):
+    """Check if any input device has been accessed since last check"""
+    for device_file in input_dir.glob("event*"):
         try:
-            import select  # noqa: PLC0415
+            stat = device_file.stat()
+            # Check if file was accessed after our last check
+            if stat.st_atime > last_check_time or stat.st_mtime > last_check_time:
+                # Log the activity for debugging
+                logger.debug(f"Input device activity detected (file timestamp): {device_file.name}")
 
-            # Monitor stdin for activity
-            while True:
-                # Check if there's input available on stdin (non-blocking)
-                readable, _, _ = select.select([sys.stdin], [], [], 0.5)
-                if readable:
-                    # Drain the input buffer
-                    try:
-                        sys.stdin.read(1024)
-                    except OSError:
-                        pass
-                    was_inactive = timeout_manager.register_activity()
-                    if was_inactive:
-                        logger.info("Display reactivated by keyboard input")
+                was_inactive = timeout_manager.register_activity()
+                if was_inactive:
+                    logger.info(
+                        f"Display reactivated by input activity "
+                        f"(file timestamp: {device_file.name})"
+                    )
+                return True  # Activity detected
+        except (OSError, PermissionError):
+            # Skip files we can't access
+            pass
+    return False  # No activity detected
+
+
+def file_timestamp_listener(timeout_manager):
+    """
+    Monitor keyboard activity via file timestamps (Option C)
+    Universal fallback that works on most systems
+
+    :param timeout_manager: DisplayTimeoutManager instance to update on activity
+    """
+    logger.info("Starting file timestamp monitoring...")
+    logger.info("Monitoring /dev/input for device activity")
+
+    import os  # noqa: PLC0415, F401
+    from pathlib import Path  # noqa: PLC0415
+
+    input_dir = Path("/dev/input")
+
+    if not input_dir.exists():
+        logger.error("/dev/input directory not found - cannot monitor keyboard activity")
+        return False
+
+    logger.info("File timestamp monitoring active")
+
+    # Track last modification times
+    last_check_time = time.time()
+
+    while True:
+        try:
+            current_time = time.time()
+            _check_input_device_activity(input_dir, last_check_time, timeout_manager)
+            last_check_time = current_time
+            time.sleep(0.5)  # Check every 0.5 seconds
+
         except Exception as e:
-            logger.error(f"Stdin monitoring also failed: {e}")
-            logger.error("Display timeout feature disabled.")
+            logger.error(f"File timestamp monitoring error: {e}")
+            return False
+
+
+def stdin_listener(timeout_manager):
+    """
+    Monitor keyboard activity via stdin (Option D - terminal fallback)
+    Only works when running interactively in a terminal
+
+    :param timeout_manager: DisplayTimeoutManager instance to update on activity
+    """
+    logger.info("Starting stdin activity monitoring")
+    logger.info("Any keyboard input in this terminal will reset the timeout")
+
+    try:
+        import select  # noqa: PLC0415
+
+        # Monitor stdin for activity
+        while True:
+            # Check if there's input available on stdin (non-blocking)
+            readable, _, _ = select.select([sys.stdin], [], [], 0.5)
+            if readable:
+                # Drain the input buffer
+                try:
+                    data = sys.stdin.read(1024)
+                    # Log the input for debugging (sanitize for logging)
+                    logger.debug(f"Stdin input detected: {len(data)} character(s)")
+                except OSError:
+                    pass
+                was_inactive = timeout_manager.register_activity()
+                if was_inactive:
+                    logger.info("Display reactivated by keyboard input (stdin)")
+
+    except Exception as e:
+        logger.error(f"Stdin monitoring failed: {e}")
+        return False
+
+
+def keyboard_listener(timeout_manager, method="auto"):
+    """
+    Background thread to monitor keyboard activity
+
+    :param timeout_manager: DisplayTimeoutManager instance to update on activity
+    :param method: Input detection method: 'auto', 'pynput', 'evdev', 'file', or 'stdin'
+    """
+    if method == "pynput":
+        logger.info("Using pynput method (manual selection)")
+        if not pynput_listener(timeout_manager):
+            logger.error("pynput method failed and no fallback allowed")
+
+    elif method == "evdev":
+        logger.info("Using evdev method (manual selection)")
+        if not evdev_listener(timeout_manager):
+            logger.error("evdev method failed and no fallback allowed")
+
+    elif method == "file":
+        logger.info("Using file timestamp method (manual selection)")
+        if not file_timestamp_listener(timeout_manager):
+            logger.error("file timestamp method failed and no fallback allowed")
+
+    elif method == "stdin":
+        logger.info("Using stdin method (manual selection)")
+        if not stdin_listener(timeout_manager):
+            logger.error("stdin method failed and no fallback allowed")
+
+    else:  # auto
+        logger.info("Auto-detecting best input monitoring method...")
+
+        # Try methods in order of preference
+        if not pynput_listener(timeout_manager):
+            logger.info("Trying evdev method...")
+            if not evdev_listener(timeout_manager):
+                logger.info("Trying file timestamp method...")
+                if not file_timestamp_listener(timeout_manager):
+                    logger.info("Trying stdin method as last resort...")
+                    if not stdin_listener(timeout_manager):
+                        logger.error("All input monitoring methods failed!")
+                        logger.error("Display timeout feature disabled.")
 
 
 # Parse command-line arguments
@@ -169,7 +372,28 @@ parser.add_argument(
     action="store_true",
     help="Disable automatic display blanking",
 )
+parser.add_argument(
+    "--input-method",
+    type=str,
+    default="auto",
+    choices=["auto", "pynput", "evdev", "file", "stdin"],
+    help=(
+        "Input detection method: auto (try all), pynput (X11), evdev (Linux), "
+        "file (timestamps), stdin (terminal)"
+    ),
+)
+parser.add_argument(
+    "--debug",
+    action="store_true",
+    help="Enable debug logging (shows keyboard keystroke detection)",
+)
 args = parser.parse_args()
+
+# Set logging level based on debug flag
+if args.debug:
+    logging.getLogger().setLevel(logging.DEBUG)
+    logger.setLevel(logging.DEBUG)
+    logger.debug("Debug logging enabled")
 
 # Initialize timeout manager
 timeout_enabled = not args.no_blank and args.blank_timeout > 0
@@ -178,10 +402,13 @@ timeout_manager = DisplayTimeoutManager(timeout_seconds=args.blank_timeout, enab
 # Start keyboard monitoring thread if timeout is enabled
 if timeout_enabled:
     keyboard_thread = threading.Thread(
-        target=keyboard_listener, args=(timeout_manager,), daemon=True
+        target=keyboard_listener, args=(timeout_manager, args.input_method), daemon=True
     )
     keyboard_thread.start()
-    logger.info(f"Display blanking enabled: {args.blank_timeout}s timeout (any key to reactivate)")
+    logger.info(
+        f"Display blanking enabled: {args.blank_timeout}s timeout "
+        f"(method: {args.input_method})"
+    )
 else:
     logger.info("Display blanking disabled")
 
