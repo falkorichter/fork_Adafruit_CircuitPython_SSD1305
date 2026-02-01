@@ -10,12 +10,13 @@ Basic example demonstrating simple text and shapes on the SSD1305 display.
 Demonstrates using the Python Imaging Library (PIL/Pillow) to draw on the display.
 
 ### ssd1305_stats.py
-**Updated with hot-pluggable sensor support!**
+**Updated with hot-pluggable sensor support and OLED burn-in prevention!**
 
 Displays system statistics and sensor readings on the SSD1305 OLED. Features:
 - **Hot-pluggable sensors**: Automatically detects sensors when connected
 - **Graceful error handling**: Shows "n/a" when sensors are not available
 - **Plugin-based architecture**: Each sensor is a modular plugin
+- **OLED burn-in prevention**: Automatically blanks display after keyboard inactivity
 - Displays:
   - IP address
   - Temperature (TMP117)
@@ -23,6 +24,46 @@ Displays system statistics and sensor readings on the SSD1305 OLED. Features:
   - Light level (VEML7700)
   - Memory usage
   - Air quality (BME680)
+
+#### OLED Burn-in Prevention
+
+The stats display now supports automatic display blanking to prevent OLED burn-in.
+
+**Usage:**
+
+Default behavior (10-second timeout):
+```bash
+python examples/ssd1305_stats.py
+```
+
+Custom timeout (e.g., 30 seconds):
+```bash
+python examples/ssd1305_stats.py --blank-timeout 30
+```
+
+Disable blanking:
+```bash
+python examples/ssd1305_stats.py --no-blank
+# OR
+python examples/ssd1305_stats.py --blank-timeout 0
+```
+
+**How It Works:**
+
+- The display monitors keyboard activity in the background using the `pynput` library
+- After the specified timeout period with no keyboard input, the display is blanked
+- Any keyboard press immediately restores the display
+- This helps prevent OLED burn-in from static content
+- Gracefully falls back if `pynput` is not available
+
+**Installation:**
+
+The burn-in prevention feature requires the optional `pynput` library:
+```bash
+pip install pynput
+```
+
+If `pynput` is not installed, the script will still run but the burn-in prevention feature will be disabled with a warning message.
 
 ### ssd1305_web_simulator.py
 **NEW**: Web-based simulator for testing without hardware!
@@ -77,6 +118,8 @@ env_data = bme680.read()
 
 ## System Service Setup
 
+When running as a systemd service, you can configure the burn-in prevention timeout:
+
 `sudo nano /etc/logrotate.d/ssd1305_stats`
 
 ```
@@ -101,13 +144,23 @@ After=multi-user.target
 [Service]
 Type=simple
 User=root
+# Default (10-second timeout):
 ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py
+# Custom timeout (30 seconds):
+# ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --blank-timeout 30
+# Disable burn-in prevention:
+# ExecStart=/home/user/env/bin/python3 /home/user/Dokumente/git/Adafruit_CircuitPython_SSD1305/examples/ssd1305_stats.py --no-blank
 Restart=on-failure
 StandardOutput=append:/var/log/ssd1305_stats.log
 StandardError=append:/var/log/ssd1305_stats.log
 
 [Install]
 WantedBy=multi-user.target
+```
+
+**Note:** Make sure `pynput` is installed in the Python environment for burn-in prevention to work:
+```bash
+/home/user/env/bin/pip install pynput
 ```
 
 Test
