@@ -46,3 +46,6 @@ _build
 .idea
 .vscode
 *~
+
+# BME680 burn-in cache files
+examples/bme680_burn_in_cache.json
