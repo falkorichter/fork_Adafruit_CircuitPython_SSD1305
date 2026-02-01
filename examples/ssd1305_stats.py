@@ -38,11 +38,11 @@ from sensor_plugins import (
     BME680Plugin,
     CPULoadPlugin,
     IPAddressPlugin,
+    KeyboardPlugin,
     MemoryUsagePlugin,
     TMP117Plugin,
     VEML7700Plugin,
 )
-
 
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="SSD1305 OLED Stats Display with burn-in prevention")
@@ -148,6 +148,7 @@ except Exception:
 tmp117 = TMP117Plugin(check_interval=5.0)
 veml7700 = VEML7700Plugin(check_interval=5.0)
 bme680 = BME680Plugin(check_interval=5.0, burn_in_time=300)
+keyboard = KeyboardPlugin(check_interval=0.1)
 ip_address = IPAddressPlugin(check_interval=30.0)
 cpu_load = CPULoadPlugin(check_interval=1.0)
 memory_usage = MemoryUsagePlugin(check_interval=5.0)
@@ -220,6 +221,7 @@ try:
             temp_data = tmp117.read()
             light_data = veml7700.read()
             bme_data = bme680.read()
+            keyboard_data = keyboard.read()
             ip_data = ip_address.read()
             cpu_data = cpu_load.read()
             memory_data = memory_usage.read()
@@ -228,6 +230,7 @@ try:
             temp_str = tmp117.format_display(temp_data)
             light_str = veml7700.format_display(light_data)
             air_quality_str = bme680.format_display(bme_data)
+            keyboard_str = keyboard.format_display(keyboard_data)
 
             # Get system info from plugins
             ip = ip_data.get("ip_address", "n/a")
@@ -251,7 +254,7 @@ try:
             draw.text((x, top + 0), f"IP: {ip} FPS:{fps:.0f}", font=font, fill=255)
             draw.text((x, top + 8), f"{temp_str} CPU: {cpu} {light_str}", font=font, fill=255)
             draw.text((x, top + 16), f"Mem: {memory}", font=font, fill=255)
-            draw.text((x, top + 25), air_quality_str, font=font, fill=255)
+            draw.text((x, top + 25), f"{air_quality_str} {keyboard_str}", font=font, fill=255)
 
             # Display image.
             disp.image(image)
