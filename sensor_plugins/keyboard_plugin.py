@@ -1,11 +1,15 @@
 """
 Keyboard sensor plugin - tracks last 5 characters entered
+
+This plugin monitors keyboard input using evdev and maintains a buffer
+of the last 5 characters. It supports an observer pattern for forwarding
+key events to other components (e.g., Bluetooth HID service).
 """
 
 import select
 import threading
 from collections import deque
-from typing import Any, Dict
+from typing import Any, Callable, Dict, List
 
 from sensor_plugins.base import SensorPlugin
 
@@ -20,6 +24,7 @@ class KeyboardPlugin(SensorPlugin):
         self.running = False
         self._lock = threading.Lock()
         self.keyboards = []
+        self._key_listeners: List[Callable[[str], None]] = []
 
     def _initialize_hardware(self) -> Any:
         """Initialize evdev keyboard listener"""
@@ -62,6 +67,46 @@ class KeyboardPlugin(SensorPlugin):
         if char:
             with self._lock:
                 self.key_buffer.append(char)
+            # Notify all registered listeners
+            self._notify_listeners(char)
+
+    def register_key_listener(self, callback: Callable[[str], None]) -> None:
+        """
+        Register a callback to be notified when a key is pressed.
+
+        This allows external components (e.g., Bluetooth HID service) to
+        receive key events without modifying the core plugin behavior.
+
+        :param callback: Function that takes a single character argument
+        """
+        with self._lock:
+            if callback not in self._key_listeners:
+                self._key_listeners.append(callback)
+
+    def unregister_key_listener(self, callback: Callable[[str], None]) -> None:
+        """
+        Unregister a previously registered key listener.
+
+        :param callback: The callback function to remove
+        """
+        with self._lock:
+            if callback in self._key_listeners:
+                self._key_listeners.remove(callback)
+
+    def _notify_listeners(self, char: str) -> None:
+        """
+        Notify all registered listeners of a key press.
+
+        :param char: The character that was pressed
+        """
+        with self._lock:
+            listeners = list(self._key_listeners)
+        for listener in listeners:
+            try:
+                listener(char)
+            except Exception:
+                # Don't let listener errors affect the plugin
+                pass
 
     def _listen_keyboard(self):
         """Background thread to listen for keyboard events"""
