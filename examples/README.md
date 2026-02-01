@@ -66,11 +66,13 @@ python examples/ssd1305_stats.py --blank-timeout 0
 
 **How It Works:**
 
-- The display monitors keyboard activity in the background using the `pynput` library
+- The display monitors keyboard activity in the background
+- First tries to use the `pynput` library for cross-platform keyboard monitoring
+- If `pynput` doesn't work (e.g., no X11/display server), automatically falls back to monitoring terminal input
 - After the specified timeout period with no keyboard input, the display is blanked
 - Any keyboard press immediately restores the display
 - This helps prevent OLED burn-in from static content
-- Gracefully falls back if `pynput` is not available (see Installation section above)
+- Works in SSH sessions, systemd services, and other headless environments
 
 ### ssd1305_web_simulator.py
 **NEW**: Web-based simulator for testing without hardware!

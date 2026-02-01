@@ -98,6 +98,7 @@ def keyboard_listener(timeout_manager):
 
     :param timeout_manager: DisplayTimeoutManager instance to update on activity
     """
+    pynput_failed = False
     try:
         from pynput import keyboard  # noqa: PLC0415
 
@@ -108,14 +109,51 @@ def keyboard_listener(timeout_manager):
                 logger.info("Display reactivated by keyboard input")
 
         # Start listening to keyboard events
-        with keyboard.Listener(on_press=on_press) as listener:
+        logger.info("Starting pynput keyboard listener...")
+        listener = keyboard.Listener(on_press=on_press)
+        listener.start()
+
+        # Check if listener started successfully
+        time.sleep(0.5)
+        if not listener.running:
+            pynput_failed = True
+            logger.warning("pynput listener failed to start (may need X11/display server)")
+            listener.stop()
+        else:
+            logger.info("pynput keyboard listener active")
             listener.join()
+
     except ImportError:
-        logger.warning("pynput library not available. Display timeout disabled.")
+        logger.warning("pynput library not available.")
         logger.warning("Install with: pip install pynput")
+        pynput_failed = True
     except Exception as e:
-        logger.warning(f"Keyboard monitoring failed: {e}")
-        logger.warning("Display timeout feature disabled.")
+        logger.warning(f"pynput keyboard monitoring failed: {e}")
+        pynput_failed = True
+
+    # Fallback to stdin monitoring if pynput doesn't work
+    if pynput_failed:
+        logger.info("Falling back to stdin activity monitoring")
+        logger.info("Any keyboard input in this terminal will reset the timeout")
+        try:
+            import select  # noqa: PLC0415
+
+            # Monitor stdin for activity
+            while True:
+                # Check if there's input available on stdin (non-blocking)
+                readable, _, _ = select.select([sys.stdin], [], [], 0.5)
+                if readable:
+                    # Drain the input buffer
+                    try:
+                        sys.stdin.read(1024)
+                    except OSError:
+                        pass
+                    was_inactive = timeout_manager.register_activity()
+                    if was_inactive:
+                        logger.info("Display reactivated by keyboard input")
+        except Exception as e:
+            logger.error(f"Stdin monitoring also failed: {e}")
+            logger.error("Display timeout feature disabled.")
 
 
 # Parse command-line arguments
