@@ -44,7 +44,6 @@ from sensor_plugins import (
     VEML7700Plugin,
 )
 
-
 # Parse command-line arguments
 parser = argparse.ArgumentParser(description="SSD1305 OLED Stats Display with burn-in prevention")
 parser.add_argument(

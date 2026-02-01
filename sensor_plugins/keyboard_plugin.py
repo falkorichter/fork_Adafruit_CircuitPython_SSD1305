@@ -52,23 +52,46 @@ class KeyboardPlugin(SensorPlugin):
         """Background thread to listen for keyboard events"""
         try:
             import evdev  # noqa: PLC0415
-            
+
             # Character mapping for common keys
             key_map = {
-                evdev.ecodes.KEY_A: 'a', evdev.ecodes.KEY_B: 'b', evdev.ecodes.KEY_C: 'c',
-                evdev.ecodes.KEY_D: 'd', evdev.ecodes.KEY_E: 'e', evdev.ecodes.KEY_F: 'f',
-                evdev.ecodes.KEY_G: 'g', evdev.ecodes.KEY_H: 'h', evdev.ecodes.KEY_I: 'i',
-                evdev.ecodes.KEY_J: 'j', evdev.ecodes.KEY_K: 'k', evdev.ecodes.KEY_L: 'l',
-                evdev.ecodes.KEY_M: 'm', evdev.ecodes.KEY_N: 'n', evdev.ecodes.KEY_O: 'o',
-                evdev.ecodes.KEY_P: 'p', evdev.ecodes.KEY_Q: 'q', evdev.ecodes.KEY_R: 'r',
-                evdev.ecodes.KEY_S: 's', evdev.ecodes.KEY_T: 't', evdev.ecodes.KEY_U: 'u',
-                evdev.ecodes.KEY_V: 'v', evdev.ecodes.KEY_W: 'w', evdev.ecodes.KEY_X: 'x',
-                evdev.ecodes.KEY_Y: 'y', evdev.ecodes.KEY_Z: 'z',
-                evdev.ecodes.KEY_0: '0', evdev.ecodes.KEY_1: '1', evdev.ecodes.KEY_2: '2',
-                evdev.ecodes.KEY_3: '3', evdev.ecodes.KEY_4: '4', evdev.ecodes.KEY_5: '5',
-                evdev.ecodes.KEY_6: '6', evdev.ecodes.KEY_7: '7', evdev.ecodes.KEY_8: '8',
-                evdev.ecodes.KEY_9: '9',
-                evdev.ecodes.KEY_SPACE: ' ',
+                evdev.ecodes.KEY_A: "a",
+                evdev.ecodes.KEY_B: "b",
+                evdev.ecodes.KEY_C: "c",
+                evdev.ecodes.KEY_D: "d",
+                evdev.ecodes.KEY_E: "e",
+                evdev.ecodes.KEY_F: "f",
+                evdev.ecodes.KEY_G: "g",
+                evdev.ecodes.KEY_H: "h",
+                evdev.ecodes.KEY_I: "i",
+                evdev.ecodes.KEY_J: "j",
+                evdev.ecodes.KEY_K: "k",
+                evdev.ecodes.KEY_L: "l",
+                evdev.ecodes.KEY_M: "m",
+                evdev.ecodes.KEY_N: "n",
+                evdev.ecodes.KEY_O: "o",
+                evdev.ecodes.KEY_P: "p",
+                evdev.ecodes.KEY_Q: "q",
+                evdev.ecodes.KEY_R: "r",
+                evdev.ecodes.KEY_S: "s",
+                evdev.ecodes.KEY_T: "t",
+                evdev.ecodes.KEY_U: "u",
+                evdev.ecodes.KEY_V: "v",
+                evdev.ecodes.KEY_W: "w",
+                evdev.ecodes.KEY_X: "x",
+                evdev.ecodes.KEY_Y: "y",
+                evdev.ecodes.KEY_Z: "z",
+                evdev.ecodes.KEY_0: "0",
+                evdev.ecodes.KEY_1: "1",
+                evdev.ecodes.KEY_2: "2",
+                evdev.ecodes.KEY_3: "3",
+                evdev.ecodes.KEY_4: "4",
+                evdev.ecodes.KEY_5: "5",
+                evdev.ecodes.KEY_6: "6",
+                evdev.ecodes.KEY_7: "7",
+                evdev.ecodes.KEY_8: "8",
+                evdev.ecodes.KEY_9: "9",
+                evdev.ecodes.KEY_SPACE: " ",
             }
 
             for event in self.keyboard_device.read_loop():
@@ -76,14 +99,18 @@ class KeyboardPlugin(SensorPlugin):
                     break
 
                 # Only process key press events (not release)
-                if event.type == evdev.ecodes.EV_KEY:
-                    key_event = evdev.categorize(event)
-                    if key_event.keystate == evdev.KeyEvent.key_down:
-                        # Map key code to character
-                        char = key_map.get(event.code)
-                        if char:
-                            with self._lock:
-                                self.key_buffer.append(char)
+                if event.type != evdev.ecodes.EV_KEY:
+                    continue
+
+                key_event = evdev.categorize(event)
+                if key_event.keystate != evdev.KeyEvent.key_down:
+                    continue
+
+                # Map key code to character
+                char = key_map.get(event.code)
+                if char:
+                    with self._lock:
+                        self.key_buffer.append(char)
         except Exception:
             # If listener fails, stop gracefully
             self.running = False
@@ -91,7 +118,7 @@ class KeyboardPlugin(SensorPlugin):
     def _read_sensor_data(self) -> Dict[str, Any]:
         """Read last 5 characters from keyboard buffer"""
         with self._lock:
-            chars = ''.join(self.key_buffer)
+            chars = "".join(self.key_buffer)
         return {"last_keys": chars}
 
     def _get_unavailable_data(self) -> Dict[str, Any]:

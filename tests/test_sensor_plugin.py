@@ -381,8 +381,8 @@ class TestBME680Plugin(unittest.TestCase):
 
     def test_read_only_cache(self):
         """Test BME680 read-only cache mode doesn't write to cache"""
-        import tempfile
         import os
+        import tempfile
         
         with patch.dict("sys.modules", {"bme680": self.bme_module}):
             from sensor_plugins import BME680Plugin
@@ -397,10 +397,10 @@ class TestBME680Plugin(unittest.TestCase):
                 plugin = BME680Plugin(burn_in_time=0.0, cache_file=cache_file, read_only_cache=True)
                 
                 # Trigger read which would normally save cache after burn-in completes
-                data = plugin.read()
+                plugin.read()
                 
                 # Cache file should not have been created since we're in read-only mode
-                self.assertFalse(os.path.exists(cache_file), 
+                self.assertFalse(os.path.exists(cache_file),
                                "Read-only cache mode should not create cache file")
             finally:
                 # Clean up
@@ -417,7 +417,7 @@ class TestBME680Plugin(unittest.TestCase):
             
             # Simulate collecting 100 readings
             for _ in range(100):
-                data = plugin.read()
+                plugin.read()
             
             # burn_in_data should be limited to 50 samples
             self.assertLessEqual(len(plugin.burn_in_data), 50)
