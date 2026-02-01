@@ -379,6 +379,49 @@ class TestBME680Plugin(unittest.TestCase):
                 if os.path.exists(cache_file):
                     os.remove(cache_file)
 
+    def test_read_only_cache(self):
+        """Test BME680 read-only cache mode doesn't write to cache"""
+        import tempfile
+        import os
+        
+        with patch.dict("sys.modules", {"bme680": self.bme_module}):
+            from sensor_plugins import BME680Plugin
+
+            # Create a temporary cache file path (file doesn't exist yet)
+            with tempfile.NamedTemporaryFile(delete=True, suffix='.json') as f:
+                cache_file = f.name
+            # File is now deleted
+
+            try:
+                # Create plugin with read_only_cache=True and burn_in_time=0 to complete immediately
+                plugin = BME680Plugin(burn_in_time=0.0, cache_file=cache_file, read_only_cache=True)
+                
+                # Trigger read which would normally save cache after burn-in completes
+                data = plugin.read()
+                
+                # Cache file should not have been created since we're in read-only mode
+                self.assertFalse(os.path.exists(cache_file), 
+                               "Read-only cache mode should not create cache file")
+            finally:
+                # Clean up
+                if os.path.exists(cache_file):
+                    os.remove(cache_file)
+
+    def test_burn_in_data_size_limit(self):
+        """Test that burn_in_data is limited to 50 samples"""
+        with patch.dict("sys.modules", {"bme680": self.bme_module}):
+            from sensor_plugins import BME680Plugin
+
+            plugin = BME680Plugin(burn_in_time=1000)  # Long burn-in time
+            plugin.start_time = time.time()
+            
+            # Simulate collecting 100 readings
+            for _ in range(100):
+                data = plugin.read()
+            
+            # burn_in_data should be limited to 50 samples
+            self.assertLessEqual(len(plugin.burn_in_data), 50)
+
 
 class TestSystemInfoPlugins(unittest.TestCase):
     """Test system information sensor plugins"""

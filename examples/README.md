@@ -78,8 +78,10 @@ env_data = bme680.read()
 - The BME680 plugin automatically saves burn-in calibration data after the initial burn-in period
 - Cached data is stored in `examples/bme680_burn_in_cache.json`
 - Cache is valid for 1 hour, after which a new burn-in is performed
-- Both OLED (`ssd1305_stats.py`) and web simulator (`ssd1305_web_simulator.py`) processes share the same cache
+- **Master/Read-only mode**: The OLED process (`ssd1305_stats.py`) is the master and writes to the cache. The web simulator (`ssd1305_web_simulator.py`) uses `read_only_cache=True` to only read from the cache, preventing file conflicts.
+- Memory usage is limited by keeping only the last 50 burn-in samples in memory
 - To disable caching or use a custom cache location, pass `cache_file` parameter to `BME680Plugin()`
+- To use read-only mode (for secondary processes), pass `read_only_cache=True` to `BME680Plugin()`
 
 **Note:** The old `sensor_plugin.py` module is maintained for backward compatibility but is deprecated. New code should use the `sensor_plugins` package.
 

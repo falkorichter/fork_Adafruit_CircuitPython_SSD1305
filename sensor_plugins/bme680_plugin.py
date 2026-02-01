@@ -18,6 +18,7 @@ class BME680Plugin(SensorPlugin):
         check_interval: float = 5.0,
         burn_in_time: float = 300,
         cache_file: Optional[str] = None,
+        read_only_cache: bool = False,
     ):
         super().__init__("BME680", check_interval)
         self.burn_in_time = burn_in_time
@@ -27,6 +28,7 @@ class BME680Plugin(SensorPlugin):
         self.hum_baseline = 40.0  # Must be > 0 and < 100
         self.hum_weighting = 0.25
         self.burn_in_complete = False
+        self.read_only_cache = read_only_cache
         
         # Cache file path - default to examples/bme680_burn_in_cache.json
         if cache_file is None:
@@ -81,6 +83,11 @@ class BME680Plugin(SensorPlugin):
                 ):
                     gas = self.sensor_instance.data.gas_resistance
                     self.burn_in_data.append(gas)
+                    
+                    # Limit burn_in_data to last 50 samples to prevent unbounded growth
+                    if len(self.burn_in_data) > 50:
+                        self.burn_in_data = self.burn_in_data[-50:]
+                    
                     result["burn_in_remaining"] = int(
                         self.burn_in_time - (curr_time - self.start_time)
                     )
@@ -89,15 +96,17 @@ class BME680Plugin(SensorPlugin):
                 samples_to_average = self.burn_in_data[-50:]
                 self.gas_baseline = sum(samples_to_average) / len(samples_to_average)
                 self.burn_in_complete = True
-                # Save burn-in cache when complete
-                self._save_burn_in_cache()
+                # Save burn-in cache when complete (only if not read-only)
+                if not self.read_only_cache:
+                    self._save_burn_in_cache()
             else:
                 # No burn-in data was collected - use a reasonable default baseline
                 # 100000 ohms is a typical value for clean air at room temperature
                 self.gas_baseline = 100000
                 self.burn_in_complete = True
-                # Save burn-in cache when complete
-                self._save_burn_in_cache()
+                # Save burn-in cache when complete (only if not read-only)
+                if not self.read_only_cache:
+                    self._save_burn_in_cache()
 
         # Read actual sensor data
         if (
