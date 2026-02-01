@@ -122,6 +122,36 @@ The display supports four different keyboard input detection methods:
 - Works in SSH sessions, systemd services, and other headless environments
 - Use `--debug` flag to see which keys are being detected for troubleshooting
 
+**Reusable Module:**
+
+The burn-in prevention functionality has been extracted into a reusable `display_timeout` module that can be used in other projects:
+
+```python
+from display_timeout import DisplayTimeoutManager, keyboard_listener
+import threading
+
+# Create timeout manager
+timeout_manager = DisplayTimeoutManager(timeout_seconds=10.0, enabled=True)
+
+# Start keyboard monitoring in background thread
+keyboard_thread = threading.Thread(
+    target=keyboard_listener, 
+    args=(timeout_manager, "auto"),  # method: auto, pynput, evdev, file, or stdin
+    daemon=True
+)
+keyboard_thread.start()
+
+# In your main loop
+if timeout_manager.should_display_be_active():
+    # Update display
+    pass
+else:
+    # Blank display
+    pass
+```
+
+See `display_timeout.py` in the repository root for full documentation.
+
 ### ssd1305_web_simulator.py
 **NEW**: Web-based simulator for testing without hardware!
 
