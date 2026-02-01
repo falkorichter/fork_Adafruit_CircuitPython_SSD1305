@@ -190,18 +190,18 @@ class DisplayServer(BaseHTTPRequestHandler):
             self.update_display()
             png_bytes = self.display.get_image_bytes()
             
-            # Track performance
+            # Track performance (use class variables to persist across requests)
             generation_time = time.time() - start_time
-            if self.last_update_time is not None:
-                frame_time = time.time() - self.last_update_time
-                self.frame_times.append(frame_time)
-                if len(self.frame_times) > self.max_frame_times:
-                    self.frame_times.pop(0)
-            self.last_update_time = time.time()
+            if DisplayServer.last_update_time is not None:
+                frame_time = time.time() - DisplayServer.last_update_time
+                DisplayServer.frame_times.append(frame_time)
+                if len(DisplayServer.frame_times) > DisplayServer.max_frame_times:
+                    DisplayServer.frame_times.pop(0)
+            DisplayServer.last_update_time = time.time()
             
             # Log performance every 10 frames
-            if len(self.frame_times) > 0 and len(self.frame_times) % 10 == 0:
-                avg_fps = 1.0 / (sum(self.frame_times) / len(self.frame_times))
+            if len(DisplayServer.frame_times) > 0 and len(DisplayServer.frame_times) % 10 == 0:
+                avg_fps = 1.0 / (sum(DisplayServer.frame_times) / len(DisplayServer.frame_times))
                 print(f"PNG generation: {generation_time*1000:.1f}ms | Avg FPS: {avg_fps:.1f}")
             
             self.send_response(200)
@@ -213,10 +213,10 @@ class DisplayServer(BaseHTTPRequestHandler):
             # Return performance stats as JSON
             stats = {
                 "fps": 0,
-                "frame_count": len(self.frame_times)
+                "frame_count": len(DisplayServer.frame_times)
             }
-            if len(self.frame_times) > 0:
-                avg_frame_time = sum(self.frame_times) / len(self.frame_times)
+            if len(DisplayServer.frame_times) > 0:
+                avg_frame_time = sum(DisplayServer.frame_times) / len(DisplayServer.frame_times)
                 stats["fps"] = round(1.0 / avg_frame_time, 1)
             
             self.send_response(200)
