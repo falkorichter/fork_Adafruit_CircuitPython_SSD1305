@@ -184,7 +184,7 @@ class BME680Plugin(SensorPlugin):
                 return False
             
             # Load cache data
-            with open(self.cache_file, 'r') as f:
+            with open(self.cache_file) as f:
                 cache_data = json.load(f)
             
             # Validate cache data

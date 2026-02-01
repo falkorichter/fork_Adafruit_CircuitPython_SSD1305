@@ -312,8 +312,8 @@ class TestBME680Plugin(unittest.TestCase):
 
     def test_cache_expiry(self):
         """Test BME680 cache expiration after 1 hour"""
-        import tempfile
         import json
+        import tempfile
         
         with patch.dict("sys.modules", {"bme680": self.bme_module}):
             from sensor_plugins import BME680Plugin
