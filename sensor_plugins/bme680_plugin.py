@@ -92,6 +92,8 @@ class BME680Plugin(SensorPlugin):
                 # Save burn-in cache when complete
                 self._save_burn_in_cache()
             else:
+                # No burn-in data was collected - use a reasonable default baseline
+                # 100000 ohms is a typical value for clean air at room temperature
                 self.gas_baseline = 100000
                 self.burn_in_complete = True
                 # Save burn-in cache when complete
