@@ -123,6 +123,31 @@ The display supports four different keyboard input detection methods:
 - Works in SSH sessions, systemd services, and other headless environments
 - Use `--debug` flag to see which keys are being detected for troubleshooting
 
+#### Test Results Matrix
+
+The following matrix shows the test results for each input detection method across different environments:
+
+| Input Method | Terminal (Manual) | Systemd Service | Desktop (X11) | SSH Session | Status | Notes |
+|--------------|-------------------|-----------------|---------------|-------------|--------|-------|
+| **evdev** (default) | ✅ Working | ✅ Working | ⚠️ Untested | ⚠️ Untested | **Recommended** | Requires evdev package and input group permissions |
+| **pynput** | ⚠️ Untested | ❌ Fails | ⚠️ Untested | ⚠️ Untested | Not recommended | Requires X11/display server |
+| **file** | ❌ Unreliable | ⚠️ Untested | ⚠️ Untested | ⚠️ Untested | Fallback only | File timestamp monitoring can be inconsistent |
+| **stdin** | ⚠️ Untested | ❌ Fails | ⚠️ Untested | ⚠️ Untested | Testing only | Only works in interactive terminal |
+| **auto** | ⚠️ Untested | ⚠️ Untested | ⚠️ Untested | ⚠️ Untested | Available | Tries all methods until one works |
+
+**Legend:**
+- ✅ **Working**: Tested and confirmed to work reliably
+- ❌ **Fails**: Tested and does not work in this environment
+- ⚠️ **Untested**: Not yet tested in this environment
+
+**Test Environment:**
+- OS: Raspberry Pi OS (Linux)
+- Hardware: Raspberry Pi
+- Python: 3.x
+- Tester: @falkorichter
+
+**Recommendation:** Use `evdev` method (now the default) for Raspberry Pi and headless Linux systems.
+
 **Reusable Module:**
 
 The burn-in prevention functionality has been extracted into a reusable `display_timeout` module that can be used in other projects:
