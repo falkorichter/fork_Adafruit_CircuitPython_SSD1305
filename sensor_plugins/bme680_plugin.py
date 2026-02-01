@@ -178,17 +178,17 @@ class BME680Plugin(SensorPlugin):
             if not self.cache_file.exists():
                 return False
             
-            # Check if cache is older than 1 hour
-            cache_age = time.time() - self.cache_file.stat().st_mtime
-            if cache_age > 3600:  # 1 hour in seconds
-                return False
-            
             # Load cache data
             with open(self.cache_file) as f:
                 cache_data = json.load(f)
             
-            # Validate cache data
+            # Validate cache data structure
             if 'gas_baseline' not in cache_data or 'timestamp' not in cache_data:
+                return False
+            
+            # Check if cache is older than 1 hour using the stored timestamp
+            cache_age = time.time() - cache_data['timestamp']
+            if cache_age > 3600:  # 1 hour in seconds
                 return False
             
             # Apply cached values
@@ -196,7 +196,7 @@ class BME680Plugin(SensorPlugin):
             self.burn_in_complete = True
             
             return True
-        except (json.JSONDecodeError, OSError, KeyError):
+        except (json.JSONDecodeError, OSError, KeyError, TypeError):
             # If any error occurs, just return False and proceed with normal burn-in
             return False
 

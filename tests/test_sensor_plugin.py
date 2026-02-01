@@ -341,11 +341,18 @@ class TestBME680Plugin(unittest.TestCase):
 
     def test_cache_missing_file(self):
         """Test BME680 behavior when cache file doesn't exist"""
+        import tempfile
+        
         with patch.dict("sys.modules", {"bme680": self.bme_module}):
             from sensor_plugins import BME680Plugin
 
+            # Create a temporary non-existent cache file path
+            with tempfile.NamedTemporaryFile(delete=True, suffix='.json') as f:
+                cache_file = f.name
+            # File is now deleted, so it won't exist
+            
             # Create plugin with non-existent cache file
-            plugin = BME680Plugin(burn_in_time=300, cache_file="/tmp/nonexistent_cache.json")
+            plugin = BME680Plugin(burn_in_time=300, cache_file=cache_file)
             self.assertFalse(plugin.burn_in_complete)
             self.assertIsNone(plugin.gas_baseline)
 
