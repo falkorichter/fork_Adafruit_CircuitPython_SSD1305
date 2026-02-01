@@ -2,6 +2,7 @@
 Keyboard sensor plugin - tracks last 5 characters entered
 """
 
+import select
 import threading
 from collections import deque
 from typing import Any, Dict
@@ -18,6 +19,7 @@ class KeyboardPlugin(SensorPlugin):
         self.listener_thread = None
         self.running = False
         self._lock = threading.Lock()
+        self.keyboards = []
 
     def _initialize_hardware(self) -> Any:
         """Initialize evdev keyboard listener"""
@@ -25,27 +27,41 @@ class KeyboardPlugin(SensorPlugin):
 
         # Find keyboard devices
         devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-        keyboards = []
+        self.keyboards = []
         for device in devices:
             # Check if device has key capabilities (is a keyboard)
             caps = device.capabilities(verbose=False)
             if 1 in caps:  # EV_KEY
-                keyboards.append(device)
+                # Check if it has actual keyboard keys
+                keys = caps[1]
+                if any(k in range(1, 128) for k in keys):
+                    self.keyboards.append(device)
 
-        if not keyboards:
+        if not self.keyboards:
             raise RuntimeError("No keyboard devices found")
-
-        # Use the first keyboard device
-        self.keyboard_device = keyboards[0]
 
         # Start listener thread
         self.running = True
-        self.listener_thread = threading.Thread(
-            target=self._listen_keyboard, daemon=True
-        )
+        self.listener_thread = threading.Thread(target=self._listen_keyboard, daemon=True)
         self.listener_thread.start()
 
-        return self.keyboard_device
+        return self.keyboards
+
+    def _process_keyboard_event(self, evdev, event, key_map):
+        """Process a single keyboard event and add character to buffer if applicable"""
+        # Only process key press events (not release)
+        if event.type != evdev.ecodes.EV_KEY:
+            return
+
+        # Only on key press (value=1), not release (value=0)
+        if event.value != 1:
+            return
+
+        # Map key code to character
+        char = key_map.get(event.code)
+        if char:
+            with self._lock:
+                self.key_buffer.append(char)
 
     def _listen_keyboard(self):
         """Background thread to listen for keyboard events"""
@@ -93,23 +109,18 @@ class KeyboardPlugin(SensorPlugin):
                 evdev.ecodes.KEY_SPACE: " ",
             }
 
-            for event in self.keyboard_device.read_loop():
-                if not self.running:
-                    break
-
-                # Only process key press events (not release)
-                if event.type != evdev.ecodes.EV_KEY:
-                    continue
-
-                key_event = evdev.categorize(event)
-                if key_event.keystate != evdev.KeyEvent.key_down:
-                    continue
-
-                # Map key code to character
-                char = key_map.get(event.code)
-                if char:
-                    with self._lock:
-                        self.key_buffer.append(char)
+            # Monitor all keyboard devices using select (non-blocking)
+            while self.running:
+                # Use select to wait for events from any keyboard
+                r, w, x = select.select(self.keyboards, [], [], 0.5)
+                for device in r:
+                    try:
+                        # Read events from this device
+                        for event in device.read():
+                            self._process_keyboard_event(evdev, event, key_map)
+                    except OSError:
+                        # Device disconnected, continue with other devices
+                        pass
         except Exception:
             # If listener fails, stop gracefully
             self.running = False
