@@ -36,7 +36,7 @@ You have a permanently installed USB numpad that needs to be integrated over WiF
 
 ```
 ┌─────────────┐     USB      ┌─────────────────────┐     WiFi      ┌─────────────────────┐
-│  USB Numpad │────────────▶│   Raspberry Pi      │◀────────────▶│   Main Server       │
+│  USB Numpad │──-──────────▶│   Raspberry Pi      │◀───────-─────▶│   Main Server       │
 │             │              │   Zero W            │   WebSocket   │   (SSD1305 Display) │
 └─────────────┘              │   - evdev reader    │               │   - keyboard_plugin │
                              │   - WebSocket client│               │   - web_simulator   │
@@ -62,7 +62,7 @@ You have a permanently installed USB numpad that needs to be integrated over WiF
 
 ```
 ┌─────────────┐     USB      ┌─────────────────────┐     WiFi      ┌─────────────────────┐
-│  USB Numpad │────────────▶│   ESP32-S2/S3       │◀────────────▶│   Main Server       │
+│  USB Numpad │────────-────▶│   ESP32-S2/S3       │◀────────-────▶│   Main Server       │
 │             │              │   - USB Host stack  │   HTTP/WS     │   (SSD1305 Display) │
 └─────────────┘              │   - WiFi client     │               │   - keyboard_plugin │
                              └─────────────────────┘               └─────────────────────┘
@@ -86,7 +86,7 @@ You have a permanently installed USB numpad that needs to be integrated over WiF
 
 ```
 ┌─────────────┐     USB      ┌─────────────────────┐    Serial    ┌─────────────────────┐
-│  USB Numpad │────────────▶│   CH559/MAX3421E    │────────────▶│   ESP8266/ESP32     │
+│  USB Numpad │─────-───────▶│   CH559/MAX3421E    │──────-──────▶│   ESP8266/ESP32     │
 │             │              │   USB Host Chip     │              │   WiFi Module       │
 └─────────────┘              └─────────────────────┘              └──────────┬──────────┘
                                                                              │ WiFi
@@ -113,7 +113,7 @@ You have a permanently installed USB numpad that needs to be integrated over WiF
 
 ```
 ┌─────────────┐     USB      ┌─────────────────────┐     WiFi      ┌─────────────────────┐
-│  USB Numpad │────────────▶│   USB Device Server │◀────────────▶│   Main Server       │
+│  USB Numpad │──────-──────▶│   USB Device Server │◀────────-────▶│   Main Server       │
 │             │              │   (Silex/Digi/etc)  │   TCP/IP      │   (Virtual USB)     │
 └─────────────┘              │                     │               │   - usbip client    │
                              └─────────────────────┘               └─────────────────────┘
