@@ -211,7 +211,8 @@ try:
         # Use sensor object as key to avoid issues with name attribute
         background_sensor_data = {}
         for sensor in all_sensors:
-            if sensor.requires_background_updates:
+            # Use getattr for defensive programming in case sensor doesn't have the property
+            if getattr(sensor, 'requires_background_updates', False):
                 background_sensor_data[sensor] = sensor.read()
         
         if display_should_be_active:
@@ -277,7 +278,7 @@ try:
         elif previous_display_state:
             logger.info("Display blanked due to inactivity")
             # Log which sensors are running in background
-            background_sensors = [s.name for s in all_sensors if s.requires_background_updates]
+            background_sensors = [s.name for s in all_sensors if getattr(s, 'requires_background_updates', False)]
             if background_sensors:
                 logger.info(f"Background sensors continue running: {', '.join(background_sensors)}")
             draw.rectangle((0, 0, width, height), outline=0, fill=0)
