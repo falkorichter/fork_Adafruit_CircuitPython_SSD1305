@@ -29,6 +29,9 @@
         }
         #display {
             border: 2px solid #333;
+            /* Scale image with CSS instead of server-side for much better performance */
+            width: 512px;
+            height: 128px;
             image-rendering: pixelated;
             image-rendering: -moz-crisp-edges;
             image-rendering: crisp-edges;
@@ -53,6 +56,9 @@
         <h1>SSD1305 Display Simulator</h1>
         <div class="display-container">
             <img id="display" src="/display.png" alt="OLED Display">
+            <div style="margin-top: 10px; color: #4CAF50; font-weight: bold;">
+                FPS: <span id="fps-counter">--</span>
+            </div>
         </div>
         <div class="info">
             <h2>About This Demo</h2>
@@ -82,13 +88,27 @@
             img.src = '/display.png?' + new Date().getTime();
         }
         
+        // Update FPS counter
+        function updateFPS() {
+            fetch('/stats')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('fps-counter').textContent = data.fps;
+                })
+                .catch(error => {
+                    console.error('Error fetching stats:', error);
+                });
+        }
+        
         // Load image immediately on page load
         window.addEventListener('DOMContentLoaded', function() {
             refreshDisplay();
+            updateFPS();
         });
         
         // Then refresh periodically
         setInterval(refreshDisplay, 2000);
+        setInterval(updateFPS, 2000);
     </script>
 </body>
 </html>
