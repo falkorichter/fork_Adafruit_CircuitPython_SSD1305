@@ -454,5 +454,94 @@ class TestSystemInfoPlugins(unittest.TestCase):
         self.assertIsNotNone(data["memory_usage"])
 
 
+class TestKeyboardPlugin(unittest.TestCase):
+    """Test keyboard sensor plugin"""
+
+    def setUp(self):
+        """Set up mock evdev module"""
+        # Create mock evdev module
+        self.mock_evdev = MagicMock()
+        self.mock_device = MagicMock()
+        self.mock_evdev.InputDevice.return_value = self.mock_device
+        self.mock_evdev.list_devices.return_value = ['/dev/input/event0']
+        
+        # Mock device capabilities
+        self.mock_device.capabilities.return_value = {1: []}  # EV_KEY = 1
+        
+        # Mock key codes
+        self.mock_evdev.ecodes = MagicMock()
+        self.mock_evdev.ecodes.EV_KEY = 1
+        self.mock_evdev.ecodes.KEY_A = 30
+        self.mock_evdev.ecodes.KEY_B = 48
+        self.mock_evdev.ecodes.KEY_C = 46
+        self.mock_evdev.ecodes.KEY_D = 32
+        self.mock_evdev.ecodes.KEY_E = 18
+        self.mock_evdev.ecodes.KEY_SPACE = 57
+        
+        # Mock KeyEvent
+        self.mock_evdev.KeyEvent = MagicMock()
+        self.mock_evdev.KeyEvent.key_down = 1
+
+    def test_initialization(self):
+        """Test KeyboardPlugin initialization"""
+        with patch.dict("sys.modules", {"evdev": self.mock_evdev}):
+            from sensor_plugins import KeyboardPlugin
+
+            plugin = KeyboardPlugin()
+            self.assertEqual(plugin.name, "Keyboard")
+
+    def test_unavailable_data(self):
+        """Test KeyboardPlugin unavailable data format"""
+        with patch.dict("sys.modules", {"evdev": self.mock_evdev}):
+            from sensor_plugins import KeyboardPlugin
+
+            plugin = KeyboardPlugin()
+            data = plugin._get_unavailable_data()
+            self.assertEqual(data["last_keys"], "n/a")
+
+    def test_format_display_empty(self):
+        """Test KeyboardPlugin format display with empty buffer"""
+        with patch.dict("sys.modules", {"evdev": self.mock_evdev}):
+            from sensor_plugins import KeyboardPlugin
+
+            plugin = KeyboardPlugin()
+            data = {"last_keys": ""}
+            formatted = plugin.format_display(data)
+            self.assertEqual(formatted, "Keys: _____")
+
+    def test_format_display_with_keys(self):
+        """Test KeyboardPlugin format display with keys"""
+        with patch.dict("sys.modules", {"evdev": self.mock_evdev}):
+            from sensor_plugins import KeyboardPlugin
+
+            plugin = KeyboardPlugin()
+            data = {"last_keys": "hello"}
+            formatted = plugin.format_display(data)
+            self.assertEqual(formatted, "Keys: hello")
+
+    def test_format_display_right_aligned(self):
+        """Test KeyboardPlugin format display is right-aligned"""
+        with patch.dict("sys.modules", {"evdev": self.mock_evdev}):
+            from sensor_plugins import KeyboardPlugin
+
+            plugin = KeyboardPlugin()
+            data = {"last_keys": "abc"}
+            formatted = plugin.format_display(data)
+            # Should be right-aligned with padding to 5 characters
+            self.assertEqual(formatted, "Keys:   abc")
+
+    def test_hardware_not_found(self):
+        """Test KeyboardPlugin when hardware is not available"""
+        # Mock no keyboard devices
+        self.mock_evdev.list_devices.return_value = []
+        
+        with patch.dict("sys.modules", {"evdev": self.mock_evdev}):
+            from sensor_plugins import KeyboardPlugin
+
+            plugin = KeyboardPlugin()
+            data = plugin.read()
+            self.assertEqual(data["last_keys"], "n/a")
+
+
 if __name__ == "__main__":
     unittest.main()

@@ -20,10 +20,11 @@ the sensor_plugins package with the following structure:
     - sensor_plugins.tmp117_plugin.TMP117Plugin
     - sensor_plugins.veml7700_plugin.VEML7700Plugin
     - sensor_plugins.bme680_plugin.BME680Plugin
+    - sensor_plugins.keyboard_plugin.KeyboardPlugin
 """
 
 # Import all classes for backward compatibility
-from sensor_plugins import BME680Plugin, SensorPlugin, TMP117Plugin, VEML7700Plugin
+from sensor_plugins import BME680Plugin, KeyboardPlugin, SensorPlugin, TMP117Plugin, VEML7700Plugin
 
-__all__ = ["SensorPlugin", "TMP117Plugin", "BME680Plugin", "VEML7700Plugin"]
+__all__ = ["SensorPlugin", "TMP117Plugin", "BME680Plugin", "VEML7700Plugin", "KeyboardPlugin"]
 

@@ -125,6 +125,7 @@ from sensor_plugins import (
     BME680Plugin,
     CPULoadPlugin,
     IPAddressPlugin,
+    KeyboardPlugin,
     MemoryUsagePlugin,
     TMP117Plugin,
     VEML7700Plugin,
@@ -164,6 +165,7 @@ class DisplayServer(BaseHTTPRequestHandler):
     tmp117 = None
     veml7700 = None
     bme680 = None
+    keyboard = None
     ip_address = None
     cpu_load = None
     memory_usage = None
@@ -252,6 +254,7 @@ class DisplayServer(BaseHTTPRequestHandler):
         temp_data = self.tmp117.read()
         light_data = self.veml7700.read()
         bme_data = self.bme680.read()
+        keyboard_data = self.keyboard.read()
         ip_data = self.ip_address.read()
         cpu_data = self.cpu_load.read()
         memory_data = self.memory_usage.read()
@@ -265,6 +268,7 @@ class DisplayServer(BaseHTTPRequestHandler):
             'temp': temp_data,
             'light': light_data,
             'bme': bme_data,
+            'keyboard': keyboard_data,
             'ip': ip_data,
             'cpu': cpu_data,
             'memory': memory_data
@@ -290,6 +294,7 @@ class DisplayServer(BaseHTTPRequestHandler):
         temp_str = self.tmp117.format_display(sensor_data['temp'])
         light_str = self.veml7700.format_display(sensor_data['light'])
         air_quality_str = self.bme680.format_display(sensor_data['bme'])
+        keyboard_str = self.keyboard.format_display(sensor_data['keyboard'])
 
         # Get system info
         ip = sensor_data['ip'].get("ip_address", "n/a")
@@ -306,7 +311,7 @@ class DisplayServer(BaseHTTPRequestHandler):
             (x, top + 8), f"{temp_str} CPU: {cpu} {light_str}", font=self.font, fill=255
         )
         self.display.draw.text((x, top + 16), f"Mem: {memory}", font=self.font, fill=255)
-        self.display.draw.text((x, top + 25), air_quality_str, font=self.font, fill=255)
+        self.display.draw.text((x, top + 25), f"{air_quality_str} {keyboard_str}", font=self.font, fill=255)
         
         render_time = time.time() - render_start
         DisplayServer.display_render_times.append(render_time)
@@ -544,6 +549,7 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
     DisplayServer.tmp117 = TMP117Plugin(check_interval=5.0)
     DisplayServer.veml7700 = VEML7700Plugin(check_interval=5.0)
     DisplayServer.bme680 = BME680Plugin(check_interval=5.0, burn_in_time=30, read_only_cache=True)
+    DisplayServer.keyboard = KeyboardPlugin(check_interval=0.1)
     DisplayServer.ip_address = IPAddressPlugin(check_interval=30.0)
     DisplayServer.cpu_load = CPULoadPlugin(check_interval=1.0)
     DisplayServer.memory_usage = MemoryUsagePlugin(check_interval=5.0)
