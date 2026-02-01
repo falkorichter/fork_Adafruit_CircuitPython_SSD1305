@@ -107,8 +107,15 @@ print("Starting sensor monitoring with hot-pluggable support...")
 print("Sensors will be automatically detected when connected.")
 print("Press CTRL+C to stop and clear the display.\n")
 
+# Performance tracking
+frame_times = []
+max_frame_times = 100  # Keep last 100 frame times for FPS calculation
+last_frame_time = time.time()
+
 try:
     while True:
+        frame_start = time.time()
+        
         # Draw a black filled box to clear the image.
         draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
@@ -129,9 +136,22 @@ try:
         ip = ip_data.get("ip_address", "n/a")
         cpu = cpu_data.get("cpu_load", "n/a")
         memory = memory_data.get("memory_usage", "n/a")
+        
+        # Calculate FPS
+        current_time = time.time()
+        if last_frame_time is not None:
+            frame_time = current_time - last_frame_time
+            frame_times.append(frame_time)
+            if len(frame_times) > max_frame_times:
+                frame_times.pop(0)
+        
+        fps = 0
+        if len(frame_times) > 0:
+            avg_frame_time = sum(frame_times) / len(frame_times)
+            fps = 1.0 / avg_frame_time
 
         # Write four lines of text on the display.
-        draw.text((x, top + 0), f"IP: {ip}", font=font, fill=255)
+        draw.text((x, top + 0), f"IP: {ip} FPS:{fps:.0f}", font=font, fill=255)
         draw.text((x, top + 8), f"{temp_str} CPU: {cpu} {light_str}", font=font, fill=255)
         draw.text((x, top + 16), f"Mem: {memory}", font=font, fill=255)
         draw.text((x, top + 25), air_quality_str, font=font, fill=255)
@@ -139,6 +159,16 @@ try:
         # Display image.
         disp.image(image)
         disp.show()
+        
+        # Track frame timing
+        frame_end = time.time()
+        display_time = frame_end - frame_start
+        last_frame_time = current_time
+        
+        # Log performance every 10 frames
+        if len(frame_times) > 0 and len(frame_times) % 10 == 0:
+            print(f"Display update: {display_time*1000:.1f}ms | FPS: {fps:.1f}")
+        
         time.sleep(0.1)
 except KeyboardInterrupt:
     # This is a backup in case signal handler doesn't trigger
