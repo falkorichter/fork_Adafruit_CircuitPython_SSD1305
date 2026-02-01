@@ -139,13 +139,9 @@ class DisplaySimulator:
         """Get display as PNG bytes"""
         # Convert 1-bit image to RGB for better visibility
         # Use convert() instead of pixel-by-pixel operation for much better performance
+        # Send small image and let browser scale it with CSS for much better performance
+        # On Raspberry Pi: ~6-10ms vs ~120ms with server-side scaling
         rgb_image = self.image.convert("RGB")
-
-        # Scale up for better visibility
-        scale = 4
-        rgb_image = rgb_image.resize(
-            (self.width * scale, self.height * scale), Image.NEAREST
-        )
 
         buffer = io.BytesIO()
         rgb_image.save(buffer, format="PNG", optimize=False)
