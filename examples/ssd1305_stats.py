@@ -281,11 +281,7 @@ print()  # Blank line for readability
 frame_times = []
 max_frame_times = 100  # Keep last 100 frame times for FPS calculation
 last_frame_time = None  # Initialize to None to skip first frame timing
-
-# Performance tracking
-frame_times = []
-max_frame_times = 100  # Keep last 100 frame times for FPS calculation
-last_frame_time = None  # Initialize to None to skip first frame timing
+last_log_time = 0  # Track last time we logged display update info
 
 try:
     previous_display_state = True
@@ -345,9 +341,10 @@ try:
             display_time = frame_end - frame_start
             last_frame_time = current_time
 
-            # Log performance every 10 frames
-            if len(frame_times) > 0 and len(frame_times) % 10 == 0:
+            # Log performance every 5 seconds
+            if current_time - last_log_time >= 5.0:
                 logger.info(f"Display update: {display_time * 1000:.1f}ms | FPS: {fps:.1f}")
+                last_log_time = current_time
         # Display is timed out - blank it once when state changes
         elif previous_display_state:
             logger.info("Display blanked due to inactivity")
