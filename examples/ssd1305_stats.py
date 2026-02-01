@@ -240,16 +240,32 @@ ip_address = IPAddressPlugin(check_interval=30.0)
 cpu_load = CPULoadPlugin(check_interval=1.0)
 memory_usage = MemoryUsagePlugin(check_interval=5.0)
 
+# Flag to prevent re-entrant signal handler calls (use dict to avoid global statement)
+_cleanup_state = {"in_progress": False}
+
 
 def cleanup_display(sig=None, frame=None):
     """Clear the display when script is interrupted"""
+    # Prevent re-entrant calls if cleanup is already in progress
+    if _cleanup_state["in_progress"]:
+        logger.warning("Force exit...")
+        sys.exit(1)
+
+    _cleanup_state["in_progress"] = True
     logger.info("Cleaning up display...")
-    # Clear display by drawing all black
-    draw.rectangle((0, 0, width, height), outline=0, fill=0)
-    disp.image(image)
-    disp.show()
-    logger.info("Display cleared. Exiting.")
-    sys.exit(0)
+
+    try:
+        # Clear display by drawing all black
+        draw.rectangle((0, 0, width, height), outline=0, fill=0)
+        disp.image(image)
+        disp.show()
+        logger.info("Display cleared. Exiting.")
+    except Exception as e:
+        # If display cleanup fails, still exit gracefully
+        logger.error(f"Error clearing display during cleanup: {e}")
+        logger.info("Exiting anyway.")
+    finally:
+        sys.exit(0)
 
 
 # Register signal handlers for clean shutdown
