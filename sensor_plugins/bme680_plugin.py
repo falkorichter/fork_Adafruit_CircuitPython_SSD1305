@@ -40,6 +40,16 @@ class BME680Plugin(SensorPlugin):
         else:
             self.cache_file = Path(cache_file)
 
+    @property
+    def requires_background_updates(self) -> bool:
+        """
+        BME680 requires background updates during burn-in period and for continuous
+        air quality measurement to maintain accurate baseline.
+        
+        :return: True - BME680 always needs background updates
+        """
+        return True
+
     def _initialize_hardware(self) -> Any:
         """Initialize BME680 sensor"""
         import bme680  # noqa: PLC0415 - Import inside method for optional dependency

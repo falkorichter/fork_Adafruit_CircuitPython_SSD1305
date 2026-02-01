@@ -152,6 +152,9 @@ ip_address = IPAddressPlugin(check_interval=30.0)
 cpu_load = CPULoadPlugin(check_interval=1.0)
 memory_usage = MemoryUsagePlugin(check_interval=5.0)
 
+# List of all sensors - used for dynamic background update handling
+all_sensors = [tmp117, veml7700, bme680, ip_address, cpu_load, memory_usage]
+
 # Flag to prevent re-entrant signal handler calls (use dict to avoid global statement)
 _cleanup_state = {"in_progress": False}
 
@@ -195,6 +198,11 @@ max_frame_times = 100  # Keep last 100 frame times for FPS calculation
 last_frame_time = None  # Initialize to None to skip first frame timing
 last_log_time = 0  # Track last time we logged display update info
 
+# Helper function to get sensor data (from cache or fresh read)
+def get_sensor_data(sensor, background_cache):
+    """Get sensor data from background cache if available, otherwise read fresh"""
+    return background_cache.get(sensor, sensor.read())
+
 try:
     previous_display_state = True
     while True:
@@ -204,10 +212,11 @@ try:
         display_should_be_active = timeout_manager.should_display_be_active()
 
         if display_should_be_active:
+            # When display is active, read all sensors normally
             # Draw a black filled box to clear the image.
             draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
-            # Read sensor data using plugins
+            # Read all sensor data
             temp_data = tmp117.read()
             light_data = veml7700.read()
             bme_data = bme680.read()
@@ -257,12 +266,24 @@ try:
             if current_time - last_log_time >= 5.0:
                 logger.info(f"Display update: {display_time * 1000:.1f}ms | FPS: {fps:.1f}")
                 last_log_time = current_time
-        # Display is timed out - blank it once when state changes
-        elif previous_display_state:
-            logger.info("Display blanked due to inactivity")
-            draw.rectangle((0, 0, width, height), outline=0, fill=0)
-            disp.image(image)
-            disp.show()
+        else:
+            # When display is off, only read sensors that require background updates
+            # This ensures continuous operation for sensors like BME680 during burn-in
+            for sensor in all_sensors:
+                # Use getattr for defensive programming in case sensor doesn't have the property
+                if getattr(sensor, 'requires_background_updates', False):
+                    sensor.read()
+            
+            # Blank display once when state changes
+            if previous_display_state:
+                logger.info("Display blanked due to inactivity")
+                # Log which sensors are running in background
+                background_sensors = [s.name for s in all_sensors if getattr(s, 'requires_background_updates', False)]
+                if background_sensors:
+                    logger.info(f"Background sensors continue running: {', '.join(background_sensors)}")
+                draw.rectangle((0, 0, width, height), outline=0, fill=0)
+                disp.image(image)
+                disp.show()
 
         previous_display_state = display_should_be_active
         time.sleep(0.1)
