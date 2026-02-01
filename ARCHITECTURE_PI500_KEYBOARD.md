@@ -89,6 +89,8 @@ This document outlines hardware options for making the **Raspberry Pi 500+** act
 | **Raspberry Pi Pico** | USB HID + UART | [Raspberry Pi](https://www.raspberrypi.com/products/raspberry-pi-pico/) | ~$4 |
 | **Adafruit QT Py** | USB HID + I2C/STEMMA QT | [Adafruit](https://www.adafruit.com/product/4600) | ~$8 |
 
+- Adafruit QT Py ESP32-S2 WiFi Dev Board mit STEMMA QT https://www.berrybase.de/adafruit-qt-py-esp32-s2-wifi-dev-board-mit-stemma-qt
+
 **STEMMA QT/Qwiic Connection Option:**
 
 Since you have a Qwiic/STEMMA QT connector, you can use the **Adafruit QT Py** which has native STEMMA QT support:
