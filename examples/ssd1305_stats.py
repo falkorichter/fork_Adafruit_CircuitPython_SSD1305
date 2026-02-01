@@ -106,7 +106,7 @@ def pynput_listener(timeout_manager):
             """Called when any key is pressed"""
             # Log the keystroke for debugging
             try:
-                key_name = key.char if hasattr(key, 'char') else str(key)
+                key_name = key.char if (hasattr(key, 'char') and key.char) else str(key)
             except AttributeError:
                 key_name = str(key)
             logger.debug(f"Key pressed (pynput): {key_name}")
@@ -151,6 +151,13 @@ def _is_keyboard_device(device):
     return any(k in range(1, 128) for k in keys)
 
 
+def _get_key_name(evdev, event_code):
+    """Get human-readable key name from evdev event code"""
+    if event_code in evdev.ecodes.KEY:
+        return evdev.ecodes.KEY[event_code]
+    return f"code:{event_code}"
+
+
 def _find_keyboard_devices(evdev):
     """Find all keyboard devices using evdev"""
     devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
@@ -191,22 +198,27 @@ def evdev_listener(timeout_manager):
                 try:
                     # Read events
                     for event in device.read():
-                        # Key press event (EV_KEY, value=1 is press, value=0 is release)
-                        if event.type == evdev.ecodes.EV_KEY and event.value in {0, 1}:
-                            # Log the keystroke for debugging
-                            key_name = evdev.ecodes.KEY[event.code] if event.code in evdev.ecodes.KEY else f"code:{event.code}"
-                            logger.debug(
-                                f"Key {'pressed' if event.value == 1 else 'released'} "
-                                f"(evdev): {key_name}"
-                            )
+                        # Key event (EV_KEY)
+                        if event.type == evdev.ecodes.EV_KEY:
+                            # Extract key name once to avoid redundant calls
+                            key_name = _get_key_name(evdev, event.code)
 
-                            was_inactive = timeout_manager.register_activity()
-                            if was_inactive:
-                                logger.info(
-                                    f"Display reactivated by keyboard input "
-                                    f"(evdev: {device.name}, key: {key_name})"
+                            # Log both press and release for debugging
+                            if event.value in {0, 1}:
+                                logger.debug(
+                                    f"Key {'pressed' if event.value == 1 else 'released'} "
+                                    f"(evdev): {key_name}"
                                 )
-                            break  # Only register once per batch of events
+
+                            # Only register activity on key press (value=1)
+                            if event.value == 1:
+                                was_inactive = timeout_manager.register_activity()
+                                if was_inactive:
+                                    logger.info(
+                                        f"Display reactivated by keyboard input "
+                                        f"(evdev: {device.name}, key: {key_name})"
+                                    )
+                                # Continue to process other events
                 except OSError:
                     # Device disconnected
                     pass
@@ -240,11 +252,11 @@ def _check_input_device_activity(input_dir, last_check_time, timeout_manager):
                         f"Display reactivated by input activity "
                         f"(file timestamp: {device_file.name})"
                     )
-                return True  # Activity detected
+                # Activity detected, no need to continue checking
+                return
         except (OSError, PermissionError):
             # Skip files we can't access
             pass
-    return False  # No activity detected
 
 
 def file_timestamp_listener(timeout_manager):
@@ -257,7 +269,6 @@ def file_timestamp_listener(timeout_manager):
     logger.info("Starting file timestamp monitoring...")
     logger.info("Monitoring /dev/input for device activity")
 
-    import os  # noqa: PLC0415, F401
     from pathlib import Path  # noqa: PLC0415
 
     input_dir = Path("/dev/input")
@@ -328,21 +339,25 @@ def keyboard_listener(timeout_manager, method="auto"):
         logger.info("Using pynput method (manual selection)")
         if not pynput_listener(timeout_manager):
             logger.error("pynput method failed and no fallback allowed")
+            return
 
     elif method == "evdev":
         logger.info("Using evdev method (manual selection)")
         if not evdev_listener(timeout_manager):
             logger.error("evdev method failed and no fallback allowed")
+            return
 
     elif method == "file":
         logger.info("Using file timestamp method (manual selection)")
         if not file_timestamp_listener(timeout_manager):
             logger.error("file timestamp method failed and no fallback allowed")
+            return
 
     elif method == "stdin":
         logger.info("Using stdin method (manual selection)")
         if not stdin_listener(timeout_manager):
             logger.error("stdin method failed and no fallback allowed")
+            return
 
     else:  # auto
         logger.info("Auto-detecting best input monitoring method...")
@@ -509,11 +524,6 @@ frame_times = []
 max_frame_times = 100  # Keep last 100 frame times for FPS calculation
 last_frame_time = None  # Initialize to None to skip first frame timing
 
-# Performance tracking
-frame_times = []
-max_frame_times = 100  # Keep last 100 frame times for FPS calculation
-last_frame_time = None  # Initialize to None to skip first frame timing
-
 try:
     previous_display_state = True
     while True:
@@ -572,8 +582,8 @@ try:
             display_time = frame_end - frame_start
             last_frame_time = current_time
 
-            # Log performance every 10 frames
-            if len(frame_times) > 0 and len(frame_times) % 10 == 0:
+            # Log performance every 10 frames (after at least 10 frames collected)
+            if len(frame_times) >= 10 and len(frame_times) % 10 == 0:
                 logger.info(f"Display update: {display_time * 1000:.1f}ms | FPS: {fps:.1f}")
         # Display is timed out - blank it once when state changes
         elif previous_display_state:

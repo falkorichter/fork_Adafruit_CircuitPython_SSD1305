@@ -248,7 +248,8 @@ sudo usermod -a -G input root
 
 However, `pynput` requires X11/display server and won't work in headless environments.
 
-Test
+**Testing the Service:**
+
 Reload the daemon:
 `sudo systemctl daemon-reload`
 
