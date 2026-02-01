@@ -268,6 +268,35 @@ from sensor_plugins import (
 )
 
 
+def create_display_update_helper(display_server_class):
+    """Create a helper object that can call DisplayServer instance methods.
+
+    This is needed because DisplayServer methods like update_display() use
+    self.display, self.tmp117, etc., which are class attributes accessed via instance.
+    """
+    class DisplayUpdateHelper:
+        """Helper to access DisplayServer rendering methods"""
+        display = display_server_class.display
+        tmp117 = display_server_class.tmp117
+        veml7700 = display_server_class.veml7700
+        bme680 = display_server_class.bme680
+        keyboard = display_server_class.keyboard
+        ip_address = display_server_class.ip_address
+        cpu_load = display_server_class.cpu_load
+        memory_usage = display_server_class.memory_usage
+        font = display_server_class.font
+
+    helper = DisplayUpdateHelper()
+    # Bind DisplayServer methods to this helper instance
+    helper.update_display = display_server_class.update_display.__get__(
+        helper, DisplayUpdateHelper
+    )
+    helper._read_fresh_sensor_data = display_server_class._read_fresh_sensor_data.__get__(
+        helper, DisplayUpdateHelper
+    )
+    return helper
+
+
 class DisplaySimulator:
     """Simulate the SSD1305 display"""
 
@@ -755,28 +784,13 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
             num_clients = len(DisplayServer.websocket_clients)
             print(f"WebSocket client connected. Total clients: {num_clients}")
 
-            # Create a minimal handler instance to access update_display method
-            # This is needed because update_display() uses self.display, self.tmp117, etc.
-            # which are class attributes but accessed via instance
-            class MinimalHandler:
-                display = DisplayServer.display
-                tmp117 = DisplayServer.tmp117
-                veml7700 = DisplayServer.veml7700
-                bme680 = DisplayServer.bme680
-                keyboard = DisplayServer.keyboard
-                ip_address = DisplayServer.ip_address
-                cpu_load = DisplayServer.cpu_load
-                memory_usage = DisplayServer.memory_usage
-                font = DisplayServer.font
-                
-            minimal_handler = MinimalHandler()
-            # Bind the methods from DisplayServer to this minimal instance
-            minimal_handler.update_display = DisplayServer.update_display.__get__(minimal_handler, MinimalHandler)
-            minimal_handler._read_fresh_sensor_data = DisplayServer._read_fresh_sensor_data.__get__(minimal_handler, MinimalHandler)
+            # Create helper to access display rendering methods
+            # Reuse this instance for the lifetime of the WebSocket connection
+            display_helper = create_display_update_helper(DisplayServer)
 
             try:
                 # Send initial image
-                minimal_handler.update_display()
+                display_helper.update_display()
                 png_bytes = DisplayServer.display.get_image_bytes()
                 await websocket.send(
                     json.dumps(
@@ -789,7 +803,7 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
                     """Send display updates periodically"""
                     while True:
                         await asyncio.sleep(0.5)  # Send updates every 500ms
-                        minimal_handler.update_display()
+                        display_helper.update_display()
                         png_bytes = DisplayServer.display.get_image_bytes()
                         await websocket.send(
                             json.dumps(
