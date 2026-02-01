@@ -109,7 +109,7 @@ def cleanup_display(sig=None, frame=None):
         print("Display cleared. Exiting.")
     except Exception as e:
         # If display cleanup fails, still exit gracefully
-        print(f"Error during cleanup: {e}")
+        print(f"Error clearing display during cleanup: {e}")
         print("Exiting anyway.")
     finally:
         sys.exit(0)
