@@ -203,14 +203,17 @@ try:
         # Check if display should be active
         display_should_be_active = timeout_manager.should_display_be_active()
 
+        # Always read sensors that require background updates (e.g., BME680 during burn-in)
+        # This ensures continuous operation even when display is off
+        bme_data = bme680.read()
+        
         if display_should_be_active:
             # Draw a black filled box to clear the image.
             draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
-            # Read sensor data using plugins
+            # Read remaining sensor data
             temp_data = tmp117.read()
             light_data = veml7700.read()
-            bme_data = bme680.read()
             ip_data = ip_address.read()
             cpu_data = cpu_load.read()
             memory_data = memory_usage.read()
@@ -260,6 +263,7 @@ try:
         # Display is timed out - blank it once when state changes
         elif previous_display_state:
             logger.info("Display blanked due to inactivity")
+            logger.info("Background sensors (BME680) continue running for air quality measurement")
             draw.rectangle((0, 0, width, height), outline=0, fill=0)
             disp.image(image)
             disp.show()

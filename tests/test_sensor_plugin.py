@@ -98,6 +98,14 @@ class TestSensorPlugin(unittest.TestCase):
         self.assertEqual(data["test_value"], "n/a")
         self.assertFalse(plugin.available)
 
+    def test_requires_background_updates_default(self):
+        """Test that default sensor plugins do not require background updates"""
+        plugin = self.TestPlugin("TestSensor")
+        plugin.should_fail = False
+        
+        # Default should be False
+        self.assertFalse(plugin.requires_background_updates)
+
 
 class TestTMP117Plugin(unittest.TestCase):
     """Test TMP117 sensor plugin"""
@@ -421,6 +429,15 @@ class TestBME680Plugin(unittest.TestCase):
             
             # burn_in_data should be limited to 50 samples
             self.assertLessEqual(len(plugin.burn_in_data), 50)
+
+    def test_requires_background_updates(self):
+        """Test that BME680 plugin requires background updates"""
+        with patch.dict("sys.modules", {"bme680": self.bme_module}):
+            from sensor_plugins import BME680Plugin
+
+            plugin = BME680Plugin()
+            # BME680 should always require background updates for burn-in and air quality
+            self.assertTrue(plugin.requires_background_updates)
 
 
 class TestSystemInfoPlugins(unittest.TestCase):

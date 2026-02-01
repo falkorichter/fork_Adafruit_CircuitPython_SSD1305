@@ -23,6 +23,18 @@ class SensorPlugin(ABC):
         self.last_check_time = 0
         self.sensor_instance = None
 
+    @property
+    def requires_background_updates(self) -> bool:
+        """
+        Whether this sensor requires continuous background updates even when display is off.
+        
+        Override this property to return True for sensors that need to maintain state
+        (e.g., burn-in periods, calibration, running averages) even when display is blanked.
+        
+        :return: True if sensor needs background updates, False otherwise (default)
+        """
+        return False
+
     @abstractmethod
     def _initialize_hardware(self) -> Any:
         """
