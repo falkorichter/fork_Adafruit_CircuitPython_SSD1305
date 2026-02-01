@@ -225,30 +225,8 @@ class DisplayServer(BaseHTTPRequestHandler):
         """Return the HTML page"""
         # Load HTML template from file
         template_path = Path(__file__).parent / "web_simulator_template.html"
-        try:
-            with open(template_path) as f:
-                return f.read()
-        except FileNotFoundError:
-            # Fallback to inline HTML if template not found
-            return """
-<!DOCTYPE html>
-<html>
-<head>
-    <title>SSD1305 Display Simulator</title>
-</head>
-<body>
-    <h1>SSD1305 Display Simulator</h1>
-    <img id="display" src="/display.png" alt="OLED Display">
-    <script>
-        function refreshDisplay() {
-            var img = document.getElementById('display');
-            img.src = '/display.png?' + new Date().getTime();
-        }
-        setInterval(refreshDisplay, 200);
-    </script>
-</body>
-</html>
-"""
+        with open(template_path) as f:
+            return f.read()
 
     def log_message(self, format, *args):
         """Suppress default logging"""
