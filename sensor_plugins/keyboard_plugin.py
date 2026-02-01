@@ -104,9 +104,13 @@ class KeyboardPlugin(SensorPlugin):
         for listener in listeners:
             try:
                 listener(char)
-            except Exception:
-                # Don't let listener errors affect the plugin
-                pass
+            except Exception as e:
+                # Log but don't let listener errors affect the plugin
+                import logging  # noqa: PLC0415
+
+                logging.getLogger(__name__).warning(
+                    "Key listener error for '%s': %s", char, e
+                )
 
     def _listen_keyboard(self):
         """Background thread to listen for keyboard events"""

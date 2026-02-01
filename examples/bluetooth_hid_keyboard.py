@@ -110,7 +110,7 @@ def main():
     # Handle graceful shutdown
     running = True
 
-    def signal_handler(signum, frame):
+    def signal_handler(_signum, _frame):
         nonlocal running
         logger.info("\nShutting down...")
         running = False

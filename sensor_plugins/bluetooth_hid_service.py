@@ -206,6 +206,11 @@ class BluetoothHIDService:
         self._mainloop_thread = threading.Thread(target=self.mainloop.run, daemon=True)
         self._mainloop_thread.start()
 
+        # Wait briefly for the mainloop to start
+        import time  # noqa: PLC0415
+
+        time.sleep(0.1)
+
         logger.info("Bluetooth HID service started as '%s'", self.device_name)
 
     def stop(self) -> None:
@@ -261,7 +266,8 @@ class BluetoothHIDService:
             opts = {
                 "Name": dbus.String("Pi500 HID Keyboard"),
                 "Role": dbus.String("server"),
-                "RequireAuthentication": dbus.Boolean(False),
+                # Enable authentication for security - requires pairing before use
+                "RequireAuthentication": dbus.Boolean(True),
                 "RequireAuthorization": dbus.Boolean(False),
                 "ServiceRecord": self._get_sdp_record(),
             }
@@ -277,11 +283,14 @@ class BluetoothHIDService:
         self._running = True
 
         # Create control channel socket
+        # Note: Binding to "" (all interfaces) is required for Bluetooth L2CAP sockets
+        # to accept connections from any paired Bluetooth device. This is secured by
+        # RequireAuthentication=True in the HID profile registration.
         self._control_socket = socket.socket(
             socket.AF_BLUETOOTH, socket.SOCK_SEQPACKET, socket.BTPROTO_L2CAP
         )
         self._control_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._control_socket.bind(("", L2CAP_PSM_HID_CONTROL))
+        self._control_socket.bind(("", L2CAP_PSM_HID_CONTROL))  # noqa: S104
         self._control_socket.listen(1)
 
         # Create interrupt channel socket
@@ -289,7 +298,7 @@ class BluetoothHIDService:
             socket.AF_BLUETOOTH, socket.SOCK_SEQPACKET, socket.BTPROTO_L2CAP
         )
         self._interrupt_socket.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-        self._interrupt_socket.bind(("", L2CAP_PSM_HID_INTERRUPT))
+        self._interrupt_socket.bind(("", L2CAP_PSM_HID_INTERRUPT))  # noqa: S104
         self._interrupt_socket.listen(1)
 
         # Start accept thread
@@ -528,13 +537,14 @@ class BluetoothKeyboardBridge:
             # Fallback: intercept buffer append to forward keys
             self._original_append = self.keyboard.key_buffer.append
 
-            def forwarding_append(char: str) -> None:
+            def _append_and_forward(char: str) -> None:
+                """Wrapper that appends to buffer and forwards to Bluetooth"""
                 if self._original_append:
                     self._original_append(char)
                 # Forward to Bluetooth
                 self._on_key_pressed(char)
 
-            self.keyboard.key_buffer.append = forwarding_append
+            self.keyboard.key_buffer.append = _append_and_forward
             logger.info("Using buffer interception for key forwarding")
 
         # Start Bluetooth service
