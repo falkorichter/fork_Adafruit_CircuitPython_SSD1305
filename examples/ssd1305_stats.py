@@ -8,6 +8,7 @@
 # Adafruit Blinka to support CircuitPython libraries. CircuitPython does
 # not support PIL/pillow (python imaging library)!
 
+import signal
 import sys
 import time
 from pathlib import Path
@@ -86,38 +87,62 @@ ip_address = IPAddressPlugin(check_interval=30.0)
 cpu_load = CPULoadPlugin(check_interval=1.0)
 memory_usage = MemoryUsagePlugin(check_interval=5.0)
 
-print("Starting sensor monitoring with hot-pluggable support...")
-print("Sensors will be automatically detected when connected.\n")
 
-while True:
-    # Draw a black filled box to clear the image.
+def cleanup_display(sig=None, frame=None):
+    """Clear the display when script is interrupted"""
+    print("\nCleaning up display...")
+    # Clear display by drawing all black
     draw.rectangle((0, 0, width, height), outline=0, fill=0)
-
-    # Read sensor data using plugins
-    temp_data = tmp117.read()
-    light_data = veml7700.read()
-    bme_data = bme680.read()
-    ip_data = ip_address.read()
-    cpu_data = cpu_load.read()
-    memory_data = memory_usage.read()
-
-    # Use plugin format methods
-    temp_str = tmp117.format_display(temp_data)
-    light_str = veml7700.format_display(light_data)
-    air_quality_str = bme680.format_display(bme_data)
-
-    # Get system info from plugins
-    ip = ip_data.get("ip_address", "n/a")
-    cpu = cpu_data.get("cpu_load", "n/a")
-    memory = memory_data.get("memory_usage", "n/a")
-
-    # Write four lines of text on the display.
-    draw.text((x, top + 0), f"IP: {ip}", font=font, fill=255)
-    draw.text((x, top + 8), f"{temp_str} CPU: {cpu} {light_str}", font=font, fill=255)
-    draw.text((x, top + 16), f"Mem: {memory}", font=font, fill=255)
-    draw.text((x, top + 25), air_quality_str, font=font, fill=255)
-
-    # Display image.
     disp.image(image)
     disp.show()
-    time.sleep(0.1)
+    print("Display cleared. Exiting.")
+    sys.exit(0)
+
+
+# Register signal handlers for clean shutdown
+signal.signal(signal.SIGINT, cleanup_display)  # CTRL+C
+signal.signal(signal.SIGTERM, cleanup_display)  # Termination signal
+
+print("Starting sensor monitoring with hot-pluggable support...")
+print("Sensors will be automatically detected when connected.")
+print("Press CTRL+C to stop and clear the display.\n")
+
+try:
+    while True:
+        # Draw a black filled box to clear the image.
+        draw.rectangle((0, 0, width, height), outline=0, fill=0)
+
+        # Read sensor data using plugins
+        temp_data = tmp117.read()
+        light_data = veml7700.read()
+        bme_data = bme680.read()
+        ip_data = ip_address.read()
+        cpu_data = cpu_load.read()
+        memory_data = memory_usage.read()
+
+        # Use plugin format methods
+        temp_str = tmp117.format_display(temp_data)
+        light_str = veml7700.format_display(light_data)
+        air_quality_str = bme680.format_display(bme_data)
+
+        # Get system info from plugins
+        ip = ip_data.get("ip_address", "n/a")
+        cpu = cpu_data.get("cpu_load", "n/a")
+        memory = memory_data.get("memory_usage", "n/a")
+
+        # Write four lines of text on the display.
+        draw.text((x, top + 0), f"IP: {ip}", font=font, fill=255)
+        draw.text((x, top + 8), f"{temp_str} CPU: {cpu} {light_str}", font=font, fill=255)
+        draw.text((x, top + 16), f"Mem: {memory}", font=font, fill=255)
+        draw.text((x, top + 25), air_quality_str, font=font, fill=255)
+
+        # Display image.
+        disp.image(image)
+        disp.show()
+        time.sleep(0.1)
+except KeyboardInterrupt:
+    # This is a backup in case signal handler doesn't trigger
+    cleanup_display()
+except Exception as e:
+    print(f"\nError occurred: {e}")
+    cleanup_display()
