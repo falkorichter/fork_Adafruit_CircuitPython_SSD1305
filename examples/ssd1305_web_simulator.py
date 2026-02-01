@@ -246,6 +246,30 @@ class DisplayServer(BaseHTTPRequestHandler):
             self.send_response(404)
             self.end_headers()
 
+    def _read_fresh_sensor_data(self):
+        """Read fresh sensor data from all sensors"""
+        sensor_start = time.time()
+        temp_data = self.tmp117.read()
+        light_data = self.veml7700.read()
+        bme_data = self.bme680.read()
+        ip_data = self.ip_address.read()
+        cpu_data = self.cpu_load.read()
+        memory_data = self.memory_usage.read()
+        sensor_time = time.time() - sensor_start
+        
+        DisplayServer.sensor_read_times.append(sensor_time)
+        if len(DisplayServer.sensor_read_times) > 100:
+            DisplayServer.sensor_read_times.pop(0)
+        
+        return {
+            'temp': temp_data,
+            'light': light_data,
+            'bme': bme_data,
+            'ip': ip_data,
+            'cpu': cpu_data,
+            'memory': memory_data
+        }
+    
     def update_display(self):
         """Update the display with current sensor readings"""
         # Clear display
@@ -255,27 +279,7 @@ class DisplayServer(BaseHTTPRequestHandler):
         with DisplayServer.sensor_data_lock:
             if DisplayServer.cached_sensor_data is None:
                 # First time or cache expired, read fresh data
-                sensor_start = time.time()
-                temp_data = self.tmp117.read()
-                light_data = self.veml7700.read()
-                bme_data = self.bme680.read()
-                ip_data = self.ip_address.read()
-                cpu_data = self.cpu_load.read()
-                memory_data = self.memory_usage.read()
-                sensor_time = time.time() - sensor_start
-                
-                DisplayServer.sensor_read_times.append(sensor_time)
-                if len(DisplayServer.sensor_read_times) > 100:
-                    DisplayServer.sensor_read_times.pop(0)
-                
-                DisplayServer.cached_sensor_data = {
-                    'temp': temp_data,
-                    'light': light_data,
-                    'bme': bme_data,
-                    'ip': ip_data,
-                    'cpu': cpu_data,
-                    'memory': memory_data
-                }
+                DisplayServer.cached_sensor_data = self._read_fresh_sensor_data()
             
             sensor_data = DisplayServer.cached_sensor_data
 
@@ -341,13 +345,28 @@ class DisplayServer(BaseHTTPRequestHandler):
             stats["recommended_refresh_ms"] = max(100, int(avg_frame_time * 0.9 * 1000))
         
         if len(DisplayServer.sensor_read_times) > 0:
-            stats["sensor_read_ms"] = round(sum(DisplayServer.sensor_read_times) / len(DisplayServer.sensor_read_times) * 1000, 1)
+            avg_sensor = (
+                sum(DisplayServer.sensor_read_times)
+                / len(DisplayServer.sensor_read_times)
+                * 1000
+            )
+            stats["sensor_read_ms"] = round(avg_sensor, 1)
         
         if len(DisplayServer.display_render_times) > 0:
-            stats["display_render_ms"] = round(sum(DisplayServer.display_render_times) / len(DisplayServer.display_render_times) * 1000, 1)
+            avg_render = (
+                sum(DisplayServer.display_render_times)
+                / len(DisplayServer.display_render_times)
+                * 1000
+            )
+            stats["display_render_ms"] = round(avg_render, 1)
         
         if len(DisplayServer.png_generation_times) > 0:
-            stats["png_generation_ms"] = round(sum(DisplayServer.png_generation_times) / len(DisplayServer.png_generation_times) * 1000, 1)
+            avg_png = (
+                sum(DisplayServer.png_generation_times)
+                / len(DisplayServer.png_generation_times)
+                * 1000
+            )
+            stats["png_generation_ms"] = round(avg_png, 1)
         
         return stats
 
@@ -360,14 +379,23 @@ class DisplayServer(BaseHTTPRequestHandler):
         
         # Inject the use_mocks value and update mode text
         mode_text = "mocked sensors" if self.use_mocks else "real sensors"
-        html = html.replace('const useMocks = false;', f'const useMocks = {str(self.use_mocks).lower()};')
-        html = html.replace('<span id="mode-text">real sensors</span>', f'<span id="mode-text">{mode_text}</span>')
-        html = html.replace('const WEBSOCKETS_AVAILABLE = false;', f'const WEBSOCKETS_AVAILABLE = {str(WEBSOCKETS_AVAILABLE).lower()};')
+        use_mocks_str = str(self.use_mocks).lower()
+        html = html.replace('const useMocks = false;', f'const useMocks = {use_mocks_str};')
+        html = html.replace(
+            '<span id="mode-text">real sensors</span>',
+            f'<span id="mode-text">{mode_text}</span>'
+        )
+        ws_available_str = str(WEBSOCKETS_AVAILABLE).lower()
+        html = html.replace(
+            'const WEBSOCKETS_AVAILABLE = false;',
+            f'const WEBSOCKETS_AVAILABLE = {ws_available_str};'
+        )
         
         return html
     
     def get_benchmark_html(self):
         """Return a static benchmark HTML page for measuring base server performance"""
+        # ruff: noqa: E501
         return '''<!DOCTYPE html>
 <html>
 <head>
@@ -545,8 +573,9 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
             """Handle WebSocket connections"""
             with DisplayServer.websocket_lock:
                 DisplayServer.websocket_clients.add(websocket)
-            print(f"WebSocket client connected. Total clients: {len(DisplayServer.websocket_clients)}")
-            
+            num_clients = len(DisplayServer.websocket_clients)
+            print(f"WebSocket client connected. Total clients: {num_clients}")
+
             try:
                 # Send initial image
                 png_bytes = DisplayServer.display.get_image_bytes()
@@ -554,7 +583,7 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
                     'type': 'image',
                     'data': base64.b64encode(png_bytes).decode('utf-8')
                 }))
-                
+
                 # Keep connection alive and send updates
                 while True:
                     await asyncio.sleep(0.5)  # Send updates every 500ms
@@ -568,7 +597,8 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
             finally:
                 with DisplayServer.websocket_lock:
                     DisplayServer.websocket_clients.discard(websocket)
-                print(f"WebSocket client disconnected. Total clients: {len(DisplayServer.websocket_clients)}")
+                num_clients = len(DisplayServer.websocket_clients)
+                print(f"WebSocket client disconnected. Total clients: {num_clients}")
         
         def run_websocket_server():
             """Run WebSocket server in event loop"""
@@ -601,14 +631,26 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
 
 if __name__ == "__main__":
     import argparse
-    
+
     parser = argparse.ArgumentParser(description='SSD1305 Web Simulator')
-    parser.add_argument('--port', type=int, default=8000, help='Port to run HTTP server on (default: 8000)')
-    parser.add_argument('--use-mocks', action='store_true', help='Use mocked sensors instead of real hardware')
-    parser.add_argument('--enable-websocket', action='store_true', help='Enable WebSocket server for push updates')
-    parser.add_argument('--websocket-port', type=int, default=8001, help='Port to run WebSocket server on (default: 8001)')
+    parser.add_argument(
+        '--port', type=int, default=8000,
+        help='Port to run HTTP server on (default: 8000)'
+    )
+    parser.add_argument(
+        '--use-mocks', action='store_true',
+        help='Use mocked sensors instead of real hardware'
+    )
+    parser.add_argument(
+        '--enable-websocket', action='store_true',
+        help='Enable WebSocket server for push updates'
+    )
+    parser.add_argument(
+        '--websocket-port', type=int, default=8001,
+        help='Port to run WebSocket server on (default: 8001)'
+    )
     args = parser.parse_args()
-    
-    run_server(port=args.port, use_mocks=args.use_mocks, 
-               enable_websocket=args.enable_websocket, 
+
+    run_server(port=args.port, use_mocks=args.use_mocks,
+               enable_websocket=args.enable_websocket,
                websocket_port=args.websocket_port)
