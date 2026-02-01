@@ -110,7 +110,7 @@ print("Press CTRL+C to stop and clear the display.\n")
 # Performance tracking
 frame_times = []
 max_frame_times = 100  # Keep last 100 frame times for FPS calculation
-last_frame_time = time.time()
+last_frame_time = None  # Initialize to None to skip first frame timing
 
 try:
     while True:

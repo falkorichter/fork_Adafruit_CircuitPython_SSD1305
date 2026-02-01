@@ -3,12 +3,11 @@ System information sensor plugins
 """
 
 import socket
-import subprocess
 from typing import Any, Dict
 
 from sensor_plugins.base import SensorPlugin
 
-# Try to use psutil for better performance, fallback to subprocess if not available
+# Try to use psutil for better performance, fallback to defaults if not available
 try:
     import psutil
     HAS_PSUTIL = True
@@ -29,7 +28,7 @@ class IPAddressPlugin(SensorPlugin):
     def _read_sensor_data(self) -> Dict[str, Any]:
         """Read IP address from system"""
         try:
-            # Use socket to get local IP - much faster than subprocess
+            # Use socket to get local IP - much faster and safer than subprocess
             s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
             s.settimeout(0.1)
             try:
@@ -44,15 +43,7 @@ class IPAddressPlugin(SensorPlugin):
                 ip = "127.0.0.1"
             return {"ip_address": ip}
         except Exception:
-            # Fallback to subprocess if socket method fails
-            try:
-                cmd = "hostname -I | cut -d' ' -f1"
-                ip = subprocess.check_output(cmd, shell=True, timeout=0.5).decode("utf-8").strip()
-                if not ip:
-                    ip = "127.0.0.1"
-                return {"ip_address": ip}
-            except Exception:
-                return {"ip_address": "127.0.0.1"}
+            return {"ip_address": "127.0.0.1"}
 
     def _get_unavailable_data(self) -> Dict[str, Any]:
         """Return default IP when unavailable"""
@@ -71,18 +62,16 @@ class CPULoadPlugin(SensorPlugin):
 
     def _read_sensor_data(self) -> Dict[str, Any]:
         """Read CPU load from system"""
-        try:
-            if HAS_PSUTIL:
-                # Use psutil - much faster than subprocess
+        if HAS_PSUTIL:
+            try:
+                # Use psutil - much faster and safer than subprocess
                 load = psutil.getloadavg()[0]  # 1-minute load average
                 return {"cpu_load": f"{load:.2f}"}
-            else:
-                # Fallback to subprocess
-                cmd = "top -bn1 | grep load | awk '{printf \"%.2f\", $(NF-2)}'"
-                load = subprocess.check_output(cmd, shell=True, timeout=1.0).decode("utf-8")
-                return {"cpu_load": load}
-        except Exception:
-            return {"cpu_load": "0.50"}
+            except Exception:
+                return {"cpu_load": "0.50"}
+        else:
+            # psutil not available - return default
+            return {"cpu_load": "n/a"}
 
     def _get_unavailable_data(self) -> Dict[str, Any]:
         """Return n/a for CPU load"""
@@ -101,20 +90,18 @@ class MemoryUsagePlugin(SensorPlugin):
 
     def _read_sensor_data(self) -> Dict[str, Any]:
         """Read memory usage from system"""
-        try:
-            if HAS_PSUTIL:
-                # Use psutil - much faster than subprocess
+        if HAS_PSUTIL:
+            try:
+                # Use psutil - much faster and safer than subprocess
                 mem = psutil.virtual_memory()
                 used_mb = mem.used // (1024 * 1024)
                 total_mb = mem.total // (1024 * 1024)
                 return {"memory_usage": f"{used_mb}/{total_mb} MB"}
-            else:
-                # Fallback to subprocess
-                cmd = "free -m | awk 'NR==2{printf \"%s/%s MB\", $3,$2}'"
-                memory = subprocess.check_output(cmd, shell=True, timeout=1.0).decode("utf-8")
-                return {"memory_usage": memory}
-        except Exception:
-            return {"memory_usage": "512/2048 MB"}
+            except Exception:
+                return {"memory_usage": "512/2048 MB"}
+        else:
+            # psutil not available - return default
+            return {"memory_usage": "n/a"}
 
     def _get_unavailable_data(self) -> Dict[str, Any]:
         """Return n/a for memory usage"""

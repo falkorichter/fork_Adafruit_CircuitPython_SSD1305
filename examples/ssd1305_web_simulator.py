@@ -3,6 +3,7 @@ Web server to visualize SSD1305 display output with optional mocked sensors
 """
 
 import io
+import json
 import random
 import sys
 import time
@@ -223,7 +224,6 @@ class DisplayServer(BaseHTTPRequestHandler):
             self.send_header("Content-type", "application/json")
             self.send_header("Cache-Control", "no-cache, no-store, must-revalidate")
             self.end_headers()
-            import json
             self.wfile.write(json.dumps(stats).encode())
         else:
             self.send_response(404)
