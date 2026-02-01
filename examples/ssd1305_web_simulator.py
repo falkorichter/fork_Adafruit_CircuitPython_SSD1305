@@ -755,10 +755,29 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
             num_clients = len(DisplayServer.websocket_clients)
             print(f"WebSocket client connected. Total clients: {num_clients}")
 
+            # Create a minimal handler instance to access update_display method
+            # This is needed because update_display() uses self.display, self.tmp117, etc.
+            # which are class attributes but accessed via instance
+            class MinimalHandler:
+                display = DisplayServer.display
+                tmp117 = DisplayServer.tmp117
+                veml7700 = DisplayServer.veml7700
+                bme680 = DisplayServer.bme680
+                keyboard = DisplayServer.keyboard
+                ip_address = DisplayServer.ip_address
+                cpu_load = DisplayServer.cpu_load
+                memory_usage = DisplayServer.memory_usage
+                font = DisplayServer.font
+                
+            minimal_handler = MinimalHandler()
+            # Bind the methods from DisplayServer to this minimal instance
+            minimal_handler.update_display = DisplayServer.update_display.__get__(minimal_handler, MinimalHandler)
+            minimal_handler._read_fresh_sensor_data = DisplayServer._read_fresh_sensor_data.__get__(minimal_handler, MinimalHandler)
+
             try:
                 # Send initial image
-                handler = DisplayServer(None, None, None)
-                png_bytes = handler.get_cached_display_image()
+                minimal_handler.update_display()
+                png_bytes = DisplayServer.display.get_image_bytes()
                 await websocket.send(
                     json.dumps(
                         {"type": "image", "data": base64.b64encode(png_bytes).decode("utf-8")}
@@ -770,8 +789,8 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
                     """Send display updates periodically"""
                     while True:
                         await asyncio.sleep(0.5)  # Send updates every 500ms
-                        handler = DisplayServer(None, None, None)
-                        png_bytes = handler.get_cached_display_image()
+                        minimal_handler.update_display()
+                        png_bytes = DisplayServer.display.get_image_bytes()
                         await websocket.send(
                             json.dumps(
                                 {
