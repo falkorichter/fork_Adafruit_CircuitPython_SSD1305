@@ -9,6 +9,7 @@
 # not support PIL/pillow (python imaging library)!
 
 import argparse
+import logging
 import signal
 import sys
 import threading
@@ -22,6 +23,13 @@ from board import D4, SCL, SDA
 from PIL import Image, ImageDraw, ImageFont
 
 import adafruit_ssd1305
+
+# Set up logging
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s - %(levelname)s - %(message)s",
+)
+logger = logging.getLogger(__name__)
 
 # Add parent directory to path to import sensor_plugins
 sys.path.insert(0, str(Path(__file__).parent.parent))
@@ -97,17 +105,17 @@ def keyboard_listener(timeout_manager):
             """Called when any key is pressed"""
             was_inactive = timeout_manager.register_activity()
             if was_inactive:
-                print("Display reactivated by keyboard input")
+                logger.info("Display reactivated by keyboard input")
 
         # Start listening to keyboard events
         with keyboard.Listener(on_press=on_press) as listener:
             listener.join()
     except ImportError:
-        print("Warning: pynput library not available. Display timeout disabled.")
-        print("Install with: pip install pynput")
+        logger.warning("pynput library not available. Display timeout disabled.")
+        logger.warning("Install with: pip install pynput")
     except Exception as e:
-        print(f"Warning: Keyboard monitoring failed: {e}")
-        print("Display timeout feature disabled.")
+        logger.warning(f"Keyboard monitoring failed: {e}")
+        logger.warning("Display timeout feature disabled.")
 
 
 # Parse command-line arguments
@@ -135,9 +143,9 @@ if timeout_enabled:
         target=keyboard_listener, args=(timeout_manager,), daemon=True
     )
     keyboard_thread.start()
-    print(f"Display blanking enabled: {args.blank_timeout}s timeout (any key to reactivate)")
+    logger.info(f"Display blanking enabled: {args.blank_timeout}s timeout (any key to reactivate)")
 else:
-    print("Display blanking disabled")
+    logger.info("Display blanking disabled")
 
 # Define the Reset Pin
 oled_reset = digitalio.DigitalInOut(D4)
@@ -197,12 +205,12 @@ memory_usage = MemoryUsagePlugin(check_interval=5.0)
 
 def cleanup_display(sig=None, frame=None):
     """Clear the display when script is interrupted"""
-    print("\nCleaning up display...")
+    logger.info("Cleaning up display...")
     # Clear display by drawing all black
     draw.rectangle((0, 0, width, height), outline=0, fill=0)
     disp.image(image)
     disp.show()
-    print("Display cleared. Exiting.")
+    logger.info("Display cleared. Exiting.")
     sys.exit(0)
 
 
@@ -210,9 +218,10 @@ def cleanup_display(sig=None, frame=None):
 signal.signal(signal.SIGINT, cleanup_display)  # CTRL+C
 signal.signal(signal.SIGTERM, cleanup_display)  # Termination signal
 
-print("Starting sensor monitoring with hot-pluggable support...")
-print("Sensors will be automatically detected when connected.")
-print("Press CTRL+C to stop and clear the display.\n")
+logger.info("Starting sensor monitoring with hot-pluggable support...")
+logger.info("Sensors will be automatically detected when connected.")
+logger.info("Press CTRL+C to stop and clear the display.")
+print()  # Blank line for readability
 
 try:
     previous_display_state = True
@@ -253,7 +262,7 @@ try:
             disp.show()
         # Display is timed out - blank it once when state changes
         elif previous_display_state:
-            print("Display blanked due to inactivity")
+            logger.info("Display blanked due to inactivity")
             draw.rectangle((0, 0, width, height), outline=0, fill=0)
             disp.image(image)
             disp.show()
@@ -264,5 +273,5 @@ except KeyboardInterrupt:
     # This is a backup in case signal handler doesn't trigger
     cleanup_display()
 except Exception as e:
-    print(f"\nError occurred: {e}")
+    logger.error(f"Error occurred: {e}")
     cleanup_display()
