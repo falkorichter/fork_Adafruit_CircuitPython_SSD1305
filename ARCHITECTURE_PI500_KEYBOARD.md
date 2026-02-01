@@ -10,18 +10,18 @@ This document outlines hardware options for making the **Raspberry Pi 500+** act
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│                     RASPBERRY PI 500+                          │
+│                     RASPBERRY PI 500+                         │
 │  ┌─────────────────┐    ┌──────────────────────────────────┐  │
 │  │  Built-in       │    │       Linux Kernel               │  │
 │  │  Keyboard       ├───►│  evdev ─► USB Gadget Driver      │  │
 │  │  (Input Device) │    │           (g_hid / configfs)     │  │
 │  └─────────────────┘    └──────────────┬───────────────────┘  │
-│                                        │                       │
-│                                        ▼                       │
-│                              ┌──────────────────┐              │
-│                              │  USB-C Port      │              │
-│                              │  (OTG Mode)      │              │
-│                              └────────┬─────────┘              │
+│                                        │                      │
+│                                        ▼                      │
+│                              ┌──────────────────┐             │
+│                              │  USB-C Port      │             │
+│                              │  (OTG Mode)      │             │
+│                              └────────┬─────────┘             │
 └───────────────────────────────────────┼───────────────────────┘
                                         │ USB Cable
                                         ▼
@@ -56,14 +56,14 @@ This document outlines hardware options for making the **Raspberry Pi 500+** act
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
-│                     RASPBERRY PI 500+                          │
+│                     RASPBERRY PI 500+                         │
 │  ┌─────────────────┐    ┌──────────────────────────────────┐  │
-│  │  Built-in       │    │  Python Application               │  │
+│  │  Built-in       │    │  Python Application              │  │
 │  │  Keyboard       ├───►│  (keyboard_plugin.py)            │  │
 │  │  (evdev)        │    │         │                        │  │
 │  └─────────────────┘    └─────────┼────────────────────────┘  │
-│                                   │ Serial/I2C/SPI             │
-│                                   ▼                            │
+│                                   │ Serial/I2C/SPI            │
+│                                   ▼                           │
 │    ┌───────────────────────────────────────────────────────┐  │
 │    │  USB HID CONTROLLER BOARD                             │  │
 │    │  (Adafruit Trinket M0 / Arduino Pro Micro / Pico)     │  │
@@ -90,6 +90,8 @@ This document outlines hardware options for making the **Raspberry Pi 500+** act
 | **Adafruit QT Py** | USB HID + I2C/STEMMA QT | [Adafruit](https://www.adafruit.com/product/4600) | ~$8 |
 
 - Adafruit QT Py ESP32-S2 WiFi Dev Board mit STEMMA QT https://www.berrybase.de/adafruit-qt-py-esp32-s2-wifi-dev-board-mit-stemma-qt
+- Adafruit QT Py - SAMD21 Dev Board with STEMMA QT https://www.adafruit.com/product/4600
+- 
 
 **STEMMA QT/Qwiic Connection Option:**
 
@@ -97,7 +99,7 @@ Since you have a Qwiic/STEMMA QT connector, you can use the **Adafruit QT Py** w
 
 ```
 ┌────────────────────┐    STEMMA QT    ┌────────────────────┐
-│  Raspberry Pi 500+ │◄──────────────►│  Adafruit QT Py    │
+│  Raspberry Pi 500+ │◄──────────────►│  Adafruit QT Py     │
 │  (I2C Master)      │    I2C Cable    │  (I2C Slave +      │
 │                    │                 │   USB HID Device)  │
 └────────────────────┘                 └─────────┬──────────┘
