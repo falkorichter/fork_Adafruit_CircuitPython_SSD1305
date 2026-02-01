@@ -21,32 +21,31 @@ class KeyboardPlugin(SensorPlugin):
 
     def _initialize_hardware(self) -> Any:
         """Initialize evdev keyboard listener"""
-        try:
-            import evdev  # noqa: PLC0415 - Import inside method for optional dependency
+        import evdev  # noqa: PLC0415 - Import inside method for optional dependency
 
-            # Find keyboard devices
-            devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
-            keyboards = []
-            for device in devices:
-                # Check if device has key capabilities (is a keyboard)
-                caps = device.capabilities(verbose=False)
-                if 1 in caps:  # EV_KEY
-                    keyboards.append(device)
+        # Find keyboard devices
+        devices = [evdev.InputDevice(path) for path in evdev.list_devices()]
+        keyboards = []
+        for device in devices:
+            # Check if device has key capabilities (is a keyboard)
+            caps = device.capabilities(verbose=False)
+            if 1 in caps:  # EV_KEY
+                keyboards.append(device)
 
-            if not keyboards:
-                raise RuntimeError("No keyboard devices found")
+        if not keyboards:
+            raise RuntimeError("No keyboard devices found")
 
-            # Use the first keyboard device
-            self.keyboard_device = keyboards[0]
+        # Use the first keyboard device
+        self.keyboard_device = keyboards[0]
 
-            # Start listener thread
-            self.running = True
-            self.listener_thread = threading.Thread(target=self._listen_keyboard, daemon=True)
-            self.listener_thread.start()
+        # Start listener thread
+        self.running = True
+        self.listener_thread = threading.Thread(
+            target=self._listen_keyboard, daemon=True
+        )
+        self.listener_thread.start()
 
-            return self.keyboard_device
-        except Exception:
-            raise
+        return self.keyboard_device
 
     def _listen_keyboard(self):
         """Background thread to listen for keyboard events"""
