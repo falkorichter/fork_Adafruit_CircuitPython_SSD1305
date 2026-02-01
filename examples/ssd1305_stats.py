@@ -208,23 +208,28 @@ try:
 
         # Always read sensors that require background updates (e.g., BME680 during burn-in)
         # This ensures continuous operation even when display is off
+        # Use sensor object as key to avoid issues with name attribute
         background_sensor_data = {}
         for sensor in all_sensors:
             if sensor.requires_background_updates:
-                # Read background sensors and store with sensor name as key
-                background_sensor_data[sensor.name] = sensor.read()
+                background_sensor_data[sensor] = sensor.read()
         
         if display_should_be_active:
             # Draw a black filled box to clear the image.
             draw.rectangle((0, 0, width, height), outline=0, fill=0)
 
-            # Read remaining sensor data (skip sensors already read for background updates)
-            temp_data = tmp117.read() if not tmp117.requires_background_updates else background_sensor_data.get(tmp117.name)
-            light_data = veml7700.read() if not veml7700.requires_background_updates else background_sensor_data.get(veml7700.name)
-            bme_data = bme680.read() if not bme680.requires_background_updates else background_sensor_data.get(bme680.name)
-            ip_data = ip_address.read() if not ip_address.requires_background_updates else background_sensor_data.get(ip_address.name)
-            cpu_data = cpu_load.read() if not cpu_load.requires_background_updates else background_sensor_data.get(cpu_load.name)
-            memory_data = memory_usage.read() if not memory_usage.requires_background_updates else background_sensor_data.get(memory_usage.name)
+            # Helper function to get sensor data (from cache or fresh read)
+            def get_sensor_data(sensor):
+                """Get sensor data from background cache if available, otherwise read fresh"""
+                return background_sensor_data.get(sensor, sensor.read())
+
+            # Read sensor data (uses cached data for background sensors)
+            temp_data = get_sensor_data(tmp117)
+            light_data = get_sensor_data(veml7700)
+            bme_data = get_sensor_data(bme680)
+            ip_data = get_sensor_data(ip_address)
+            cpu_data = get_sensor_data(cpu_load)
+            memory_data = get_sensor_data(memory_usage)
 
             # Use plugin format methods
             temp_str = tmp117.format_display(temp_data)
