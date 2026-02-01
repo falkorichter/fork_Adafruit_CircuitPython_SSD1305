@@ -175,10 +175,11 @@
         
         // Auto-refresh the display image
         function refreshDisplay() {
+            // Check if WebSocket is connected and active
             if (websocket && websocket.readyState === WebSocket.OPEN) {
                 return;  // Skip polling if WebSocket is active
             }
-            
+
             var img = document.getElementById('display');
             img.src = '/display.png?' + new Date().getTime();
         }
@@ -199,7 +200,7 @@
                         document.getElementById('refresh-interval').textContent = currentRefreshInterval;
                         
                         // Restart polling with new interval
-                        if (refreshIntervalId && !websocket) {
+                        if (refreshIntervalId && (!websocket || websocket.readyState !== WebSocket.OPEN)) {
                             clearInterval(refreshIntervalId);
                             startPolling();
                         }
@@ -216,7 +217,9 @@
             }
             refreshIntervalId = setInterval(refreshDisplay, currentRefreshInterval);
             document.getElementById('connection-mode').textContent = 'Polling';
-            document.getElementById('update-mode').textContent = `polling every ${currentRefreshInterval}ms`;
+            const updateModeText = `polling every ${currentRefreshInterval}ms`;
+            document.getElementById('update-mode').textContent = updateModeText;
+            document.getElementById('refresh-interval').textContent = currentRefreshInterval;
         }
         
         // Load image immediately on page load

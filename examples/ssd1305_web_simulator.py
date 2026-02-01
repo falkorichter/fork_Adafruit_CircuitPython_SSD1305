@@ -341,7 +341,8 @@ class DisplayServer(BaseHTTPRequestHandler):
         if len(DisplayServer.frame_times) > 0:
             avg_frame_time = sum(DisplayServer.frame_times) / len(DisplayServer.frame_times)
             stats["fps"] = round(1.0 / avg_frame_time, 1)
-            # Recommend refresh rate slightly faster than actual FPS
+            # Recommend refresh rate slightly faster than actual FPS (90% of frame time)
+            # This ensures the client polls slightly faster than content updates to minimize lag
             stats["recommended_refresh_ms"] = max(100, int(avg_frame_time * 0.9 * 1000))
         
         if len(DisplayServer.sensor_read_times) > 0:
@@ -560,8 +561,16 @@ def run_server(port=8000, use_mocks=False, enable_websocket=False, websocket_por
         """Background thread to update sensor cache"""
         while True:
             time.sleep(0.5)  # Update sensors every 500ms
-            with DisplayServer.sensor_data_lock:
-                DisplayServer.cached_sensor_data = None  # Force refresh on next display update
+            # Directly update the cache instead of just invalidating it
+            try:
+                # Create a temporary handler instance to access sensor reading method
+                handler = DisplayServer(None, None, None)
+                with DisplayServer.sensor_data_lock:
+                    DisplayServer.cached_sensor_data = handler._read_fresh_sensor_data()
+            except Exception:
+                # If update fails, invalidate cache to force refresh on next display update
+                with DisplayServer.sensor_data_lock:
+                    DisplayServer.cached_sensor_data = None
     
     sensor_thread = threading.Thread(target=update_sensor_cache, daemon=True)
     sensor_thread.start()
