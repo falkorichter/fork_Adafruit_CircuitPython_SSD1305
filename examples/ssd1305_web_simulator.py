@@ -164,16 +164,18 @@ class DisplayServer(BaseHTTPRequestHandler):
     cpu_load = None
     memory_usage = None
     font = None
-    last_update = 0
 
     def do_GET(self):
         """Handle GET requests"""
-        if self.path == "/":
+        # Parse the path to remove query parameters
+        path = self.path.split('?')[0]
+        
+        if path == "/":
             self.send_response(200)
             self.send_header("Content-type", "text/html")
             self.end_headers()
             self.wfile.write(self.get_html().encode())
-        elif self.path == "/display.png":
+        elif path == "/display.png":
             self.update_display()
             self.send_response(200)
             self.send_header("Content-type", "image/png")
@@ -186,12 +188,6 @@ class DisplayServer(BaseHTTPRequestHandler):
 
     def update_display(self):
         """Update the display with current sensor readings"""
-        current_time = time.time()
-        if current_time - self.last_update < 0.1:
-            return
-
-        self.last_update = current_time
-
         # Clear display
         self.display.clear()
 

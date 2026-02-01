@@ -74,6 +74,13 @@
             var img = document.getElementById('display');
             img.src = '/display.png?' + new Date().getTime();
         }
+        
+        // Load image immediately on page load
+        window.addEventListener('DOMContentLoaded', function() {
+            refreshDisplay();
+        });
+        
+        // Then refresh periodically
         setInterval(refreshDisplay, 200);
     </script>
 </body>
