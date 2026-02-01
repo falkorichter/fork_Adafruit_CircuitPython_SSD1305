@@ -33,6 +33,7 @@ Displays system statistics and sensor readings on the SSD1305 OLED. Features:
 - **Graceful error handling**: Shows "n/a" when sensors are not available
 - **Plugin-based architecture**: Each sensor is a modular plugin
 - **OLED burn-in prevention**: Automatically blanks display after keyboard inactivity
+- **Background sensor updates**: Sensors requiring continuous measurement (like BME680 air quality) continue running even when display is blanked
 - Displays:
   - IP address
   - Temperature (TMP117)
@@ -212,6 +213,7 @@ sensor_plugins/
 - `VEML7700Plugin` - Ambient light sensor
 - `BME680Plugin` - Environmental sensor (temperature, humidity, pressure, gas, air quality)
   - **Burn-in Caching**: The BME680 sensor requires a burn-in period (default 300 seconds) to establish a baseline for air quality measurements. To avoid this delay on subsequent runs, burn-in data is automatically cached in `examples/bme680_burn_in_cache.json` and reused if less than 1 hour old.
+  - **Background Updates**: The BME680 sensor requires continuous measurement even when the display is blanked to maintain accurate air quality readings. The plugin automatically marks itself as requiring background updates via the `requires_background_updates` property.
 
 ### Usage
 ```python
@@ -226,6 +228,12 @@ bme680 = BME680Plugin(check_interval=5.0, burn_in_time=300)
 temp_data = tmp117.read()
 light_data = veml7700.read()
 env_data = bme680.read()
+
+# Check if a sensor requires background updates
+# (e.g., BME680 needs continuous reading even when display is off)
+if bme680.requires_background_updates:
+    # Always read this sensor, even when display is blanked
+    env_data = bme680.read()
 ```
 
 **BME680 Burn-in Cache:**
