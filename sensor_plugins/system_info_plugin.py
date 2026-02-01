@@ -1,7 +1,3 @@
-# SPDX-FileCopyrightText: 2026 Adafruit Industries
-#
-# SPDX-License-Identifier: MIT
-
 """
 System information sensor plugins
 """

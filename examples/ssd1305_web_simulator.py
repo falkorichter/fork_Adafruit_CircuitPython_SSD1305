@@ -1,7 +1,3 @@
-# SPDX-FileCopyrightText: 2026 Adafruit Industries
-#
-# SPDX-License-Identifier: MIT
-
 """
 Web server to visualize SSD1305 display output with mocked sensors
 """
