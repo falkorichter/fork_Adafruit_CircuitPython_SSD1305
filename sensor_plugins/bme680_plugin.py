@@ -2,8 +2,10 @@
 BME680 environmental sensor plugin
 """
 
+import json
 import time
-from typing import Any, Dict
+from pathlib import Path
+from typing import Any, Dict, Optional
 
 from sensor_plugins.base import SensorPlugin
 
@@ -11,7 +13,13 @@ from sensor_plugins.base import SensorPlugin
 class BME680Plugin(SensorPlugin):
     """Plugin for BME680 environmental sensor"""
 
-    def __init__(self, check_interval: float = 5.0, burn_in_time: float = 300):
+    def __init__(
+        self,
+        check_interval: float = 5.0,
+        burn_in_time: float = 300,
+        cache_file: Optional[str] = None,
+        read_only_cache: bool = False,
+    ):
         super().__init__("BME680", check_interval)
         self.burn_in_time = burn_in_time
         self.start_time = None
@@ -20,6 +28,17 @@ class BME680Plugin(SensorPlugin):
         self.hum_baseline = 40.0  # Must be > 0 and < 100
         self.hum_weighting = 0.25
         self.burn_in_complete = False
+        self.read_only_cache = read_only_cache
+        
+        # Cache file path - default to examples/bme680_burn_in_cache.json
+        if cache_file is None:
+            # Get the examples directory relative to this file
+            plugin_dir = Path(__file__).parent
+            repo_root = plugin_dir.parent
+            examples_dir = repo_root / "examples"
+            self.cache_file = examples_dir / "bme680_burn_in_cache.json"
+        else:
+            self.cache_file = Path(cache_file)
 
     def _initialize_hardware(self) -> Any:
         """Initialize BME680 sensor"""
@@ -38,6 +57,10 @@ class BME680Plugin(SensorPlugin):
         self.start_time = time.time()
         self.burn_in_complete = False
         self.burn_in_data = []
+        
+        # Try to load cached burn-in data
+        self._load_burn_in_cache()
+        
         return sensor
 
     def _read_sensor_data(self) -> Dict[str, Any]:
@@ -60,6 +83,11 @@ class BME680Plugin(SensorPlugin):
                 ):
                     gas = self.sensor_instance.data.gas_resistance
                     self.burn_in_data.append(gas)
+                    
+                    # Limit burn_in_data to last 50 samples to prevent unbounded growth
+                    if len(self.burn_in_data) > 50:
+                        self.burn_in_data = self.burn_in_data[-50:]
+                    
                     result["burn_in_remaining"] = int(
                         self.burn_in_time - (curr_time - self.start_time)
                     )
@@ -68,9 +96,17 @@ class BME680Plugin(SensorPlugin):
                 samples_to_average = self.burn_in_data[-50:]
                 self.gas_baseline = sum(samples_to_average) / len(samples_to_average)
                 self.burn_in_complete = True
+                # Save burn-in cache when complete (only if not read-only)
+                if not self.read_only_cache:
+                    self._save_burn_in_cache()
             else:
+                # No burn-in data was collected - use a reasonable default baseline
+                # 100000 ohms is a typical value for clean air at room temperature
                 self.gas_baseline = 100000
                 self.burn_in_complete = True
+                # Save burn-in cache when complete (only if not read-only)
+                if not self.read_only_cache:
+                    self._save_burn_in_cache()
 
         # Read actual sensor data
         if (
@@ -141,3 +177,62 @@ class BME680Plugin(SensorPlugin):
             return f"AirQ: {air_quality:.1f}"
         else:
             return "AirQ: n/a"
+
+    def _load_burn_in_cache(self) -> bool:
+        """
+        Load burn-in data from cache if it exists and is not older than 1 hour.
+        
+        Returns:
+            True if cache was loaded successfully, False otherwise
+        """
+        try:
+            if not self.cache_file.exists():
+                return False
+            
+            # Load cache data
+            with open(self.cache_file) as f:
+                cache_data = json.load(f)
+            
+            # Validate cache data structure
+            if 'gas_baseline' not in cache_data or 'timestamp' not in cache_data:
+                return False
+            
+            # Check if cache is older than 1 hour using the stored timestamp
+            cache_age = time.time() - cache_data['timestamp']
+            if cache_age > 3600:  # 1 hour in seconds
+                return False
+            
+            # Apply cached values
+            self.gas_baseline = cache_data['gas_baseline']
+            self.burn_in_complete = True
+            
+            return True
+        except (json.JSONDecodeError, OSError, KeyError, TypeError):
+            # If any error occurs, just return False and proceed with normal burn-in
+            return False
+
+    def _save_burn_in_cache(self) -> bool:
+        """
+        Save burn-in data to cache file.
+        
+        Returns:
+            True if cache was saved successfully, False otherwise
+        """
+        try:
+            # Ensure the directory exists
+            self.cache_file.parent.mkdir(parents=True, exist_ok=True)
+            
+            # Prepare cache data
+            cache_data = {
+                'gas_baseline': self.gas_baseline,
+                'timestamp': time.time(),
+            }
+            
+            # Write cache to file
+            with open(self.cache_file, 'w') as f:
+                json.dump(cache_data, f, indent=2)
+            
+            return True
+        except OSError:
+            # If we can't write the cache, just continue without it
+            return False
