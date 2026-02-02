@@ -2,6 +2,9 @@
 #
 # SPDX-License-Identifier: Unlicense
 
+# PIL/Pillow for image operations in examples (web simulator, pillow demo, stats)
+Pillow
+
 # Optional dependencies for keyboard activity monitoring in burn-in prevention:
 pynput  # Cross-platform keyboard monitoring (requires X11/display server)
 evdev  # Linux-specific keyboard monitoring (works in headless environments)
