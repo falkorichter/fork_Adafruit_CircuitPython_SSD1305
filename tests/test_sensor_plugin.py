@@ -649,7 +649,9 @@ class TestMQTTPlugin(unittest.TestCase):
         }):
             with patch('sensor_plugins.mqtt_plugin.time') as mock_time_module:
                 # Simulate time advancing to trigger timeout
-                time_values = [0.0, 0.0] + [0.1 * i for i in range(60)]
+                # Need enough iterations to exceed 5 second timeout with 0.1s sleep intervals
+                # Two initial calls (start time, first check) + 55 iterations = ~5.5 seconds
+                time_values = [0.0, 0.0] + [0.1 * i for i in range(55)]
                 mock_time_module.time.side_effect = time_values
                 mock_time_module.sleep = MagicMock()  # Don't actually sleep
                 

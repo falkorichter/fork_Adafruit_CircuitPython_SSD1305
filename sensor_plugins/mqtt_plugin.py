@@ -66,7 +66,6 @@ class MQTTPlugin(SensorPlugin):
             if rc == 0:
                 client.subscribe(self.topic)
                 connection_successful[0] = True
-            # Don't set flag if rc != 0 (connection failed)
 
         def on_message(client, userdata, msg):
             """Callback for when a message is received"""
