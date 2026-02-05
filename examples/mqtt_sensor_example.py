@@ -74,14 +74,16 @@ def main():
             print(f"\nTimestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
             print("-" * 50)
             
-            # BME68x environmental data
+            # BME68x environmental data - always show raw values
+            print(f"Temperature:    {data['temperature']} °C")
+            print(f"Humidity:       {data['humidity']} %")
+            print(f"Pressure:       {data['pressure']} Pa")
+            print(f"Gas Resistance: {data['gas_resistance']} Ω")
+            
+            # Show air quality or burn-in status
             if data.get("burn_in_remaining") is not None:
-                print(f"BME68x Burn-in: {data['burn_in_remaining']}s remaining")
+                print(f"Air Quality:    Burn-in ({data['burn_in_remaining']}s remaining)")
             else:
-                print(f"Temperature:    {data['temperature']} °C")
-                print(f"Humidity:       {data['humidity']} %")
-                print(f"Pressure:       {data['pressure']} Pa")
-                print(f"Gas Resistance: {data['gas_resistance']} Ω")
                 print(f"Air Quality:    {data['air_quality']}")
             
             # Other sensors
