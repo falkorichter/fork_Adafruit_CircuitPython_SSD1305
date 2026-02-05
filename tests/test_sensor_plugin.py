@@ -645,13 +645,15 @@ class TestMQTTPlugin(unittest.TestCase):
             plugin.sensor_instance = self.mock_client
             plugin.available = True
             plugin.message_received = True
+            # Note: Test data uses actual values from real sensor payload (issue example)
+            # Values like SOC > 100% and RSSI = 198 are non-standard but match real data
             plugin.latest_message = {
                 "VEML7700": {"Lux": 50.688},
                 "TMP117": {"Temperature (C)": 22.375},
                 "MAX17048": {"Voltage (V)": 4.21, "State Of Charge (%)": 108.8906},
                 "System Info": {"SSID": "vfExpress", "RSSI": 198},
             }
-            
+
             data = plugin._read_sensor_data()
             self.assertEqual(data["light"], 50.688)
             self.assertEqual(data["temp_c"], 22.375)
