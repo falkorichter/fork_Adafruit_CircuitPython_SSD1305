@@ -59,10 +59,13 @@ class MQTTPlugin(SensorPlugin):
         """Initialize MQTT client and connect to broker"""
         import paho.mqtt.client as mqtt  # noqa: PLC0415 - Import inside method for optional dependency
 
+        connection_successful = [False]  # Use list to allow modification in callback
+
         def on_connect(client, userdata, flags, rc):
             """Callback for when client connects to broker"""
             if rc == 0:
                 client.subscribe(self.topic)
+                connection_successful[0] = True
 
         def on_message(client, userdata, msg):
             """Callback for when a message is received"""
@@ -79,15 +82,29 @@ class MQTTPlugin(SensorPlugin):
         # Try to connect with a timeout
         try:
             client.connect(self.broker_host, self.broker_port, keepalive=60)
-        except Exception:
+        except Exception as e:
             error_msg = (
                 f"Could not connect to MQTT broker at "
-                f"{self.broker_host}:{self.broker_port}"
+                f"{self.broker_host}:{self.broker_port}: {e}"
             )
-            raise RuntimeError(error_msg)
+            raise RuntimeError(error_msg) from e
         
         # Start the network loop in a background thread
         client.loop_start()
+        
+        # Wait for connection to be established (with timeout)
+        timeout = 5.0  # 5 second timeout
+        start = time.time()
+        while not connection_successful[0] and (time.time() - start) < timeout:
+            time.sleep(0.1)
+        
+        if not connection_successful[0]:
+            client.loop_stop()
+            raise RuntimeError(
+                f"Timeout waiting for MQTT connection to "
+                f"{self.broker_host}:{self.broker_port}. "
+                f"Check that broker is running and accessible."
+            )
         
         # Initialize BME68x burn-in tracking
         self.start_time = time.time()
