@@ -739,6 +739,28 @@ class TestMQTTPlugin(unittest.TestCase):
             display = plugin.format_display(data)
             self.assertIn("n/a", display)
 
+    def test_connection_timeout(self):
+        """Test MQTT connection timeout when broker doesn't respond"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            # Mock connect to succeed but loop_start doesn't trigger on_connect callback
+            # This simulates a broker that accepts connections but doesn't complete handshake
+            plugin = MQTTPlugin()
+            
+            # Force a timeout by preventing the callback from being called
+            # The timeout is 5 seconds, but we don't want tests to wait that long
+            with patch('time.time') as mock_time:
+                # First call returns 0 (start time)
+                # Second call returns 10 (past the timeout)
+                mock_time.side_effect = [0, 10]
+                
+                data = plugin.read()
+                # Should return n/a values when connection times out
+                self.assertEqual(data["temperature"], "n/a")
+                self.assertEqual(data["humidity"], "n/a")
+                self.assertFalse(plugin.available)
+
 
 if __name__ == "__main__":
     unittest.main()
