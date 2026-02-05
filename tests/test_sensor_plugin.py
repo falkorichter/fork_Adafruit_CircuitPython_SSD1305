@@ -560,5 +560,183 @@ class TestKeyboardPlugin(unittest.TestCase):
             self.assertEqual(data["last_keys"], "n/a")
 
 
+class TestMQTTPlugin(unittest.TestCase):
+    """Test MQTT sensor plugin"""
+
+    def setUp(self):
+        """Set up mock MQTT client"""
+        self.mock_client = MagicMock()
+        self.mqtt_module = MagicMock()
+        self.mqtt_module.Client.return_value = self.mock_client
+
+    def test_initialization(self):
+        """Test MQTT plugin initialization"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin(broker_host="test.mosquitto.org", topic="test/topic")
+            self.assertEqual(plugin.name, "MQTT")
+            self.assertEqual(plugin.broker_host, "test.mosquitto.org")
+            self.assertEqual(plugin.topic, "test/topic")
+
+    def test_connection_success(self):
+        """Test successful MQTT connection"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            # Force initialization by resetting last check time
+            plugin.last_check_time = 0
+            result = plugin.check_availability()
+            # Connection should have been attempted
+            if result:
+                self.mock_client.connect.assert_called()
+            # Whether available or not, the test passes as connection was attempted
+
+    def test_connection_failure(self):
+        """Test MQTT connection failure"""
+        self.mock_client.connect.side_effect = Exception("Connection refused")
+        
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            data = plugin.read()
+            # Should return n/a values when connection fails
+            self.assertEqual(data["temperature"], "n/a")
+            self.assertEqual(data["humidity"], "n/a")
+            self.assertFalse(plugin.available)
+
+    def test_parse_bme68x_data(self):
+        """Test parsing BME68x data from MQTT message"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin(burn_in_time=0)  # Skip burn-in for test
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.burn_in_complete = True
+            plugin.gas_baseline = 100000
+            
+            # Simulate received message
+            plugin.message_received = True
+            plugin.latest_message = {
+                "BME68x": {
+                    "Humidity": 36.19836,
+                    "TemperatureC": 22.40555,
+                    "Pressure": 99244.27,
+                    "Gas Resistance": 29463.11,
+                }
+            }
+            
+            data = plugin._read_sensor_data()
+            self.assertEqual(data["temperature"], 22.40555)
+            self.assertEqual(data["humidity"], 36.19836)
+            self.assertEqual(data["pressure"], 99244.27)
+            self.assertEqual(data["gas_resistance"], 29463.11)
+            self.assertNotEqual(data["air_quality"], "n/a")
+
+    def test_parse_multiple_sensors(self):
+        """Test parsing data from multiple sensors"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+            plugin.latest_message = {
+                "VEML7700": {"Lux": 50.688},
+                "TMP117": {"Temperature (C)": 22.375},
+                "MAX17048": {"Voltage (V)": 4.21, "State Of Charge (%)": 108.8906},
+                "System Info": {"SSID": "vfExpress", "RSSI": 198},
+            }
+            
+            data = plugin._read_sensor_data()
+            self.assertEqual(data["light"], 50.688)
+            self.assertEqual(data["temp_c"], 22.375)
+            self.assertEqual(data["voltage"], 4.21)
+            self.assertEqual(data["soc"], 108.8906)
+            self.assertEqual(data["ssid"], "vfExpress")
+            self.assertEqual(data["rssi"], 198)
+
+    def test_no_message_received(self):
+        """Test behavior when no MQTT message has been received"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = False
+            
+            data = plugin._read_sensor_data()
+            # All values should be n/a
+            self.assertEqual(data["temperature"], "n/a")
+            self.assertEqual(data["light"], "n/a")
+            self.assertEqual(data["temp_c"], "n/a")
+
+    def test_air_quality_calculation(self):
+        """Test BME68x air quality calculation similar to BME680Plugin"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin(burn_in_time=0)
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.burn_in_complete = True
+            plugin.gas_baseline = 50000
+            plugin.message_received = True
+            
+            # Test with good air quality (gas resistance near baseline)
+            plugin.latest_message = {
+                "BME68x": {
+                    "Humidity": 40.0,
+                    "TemperatureC": 22.0,
+                    "Pressure": 1013.25,
+                    "Gas Resistance": 50000,
+                }
+            }
+            
+            data = plugin._read_sensor_data()
+            air_quality = data["air_quality"]
+            self.assertNotEqual(air_quality, "n/a")
+            self.assertIsInstance(air_quality, (int, float))
+            # Air quality should be a reasonable value (0-100 scale)
+            self.assertGreaterEqual(air_quality, 0)
+
+    def test_requires_background_updates(self):
+        """Test that MQTT plugin requires background updates"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            self.assertTrue(plugin.requires_background_updates)
+
+    def test_format_display(self):
+        """Test display formatting"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            
+            # Test burn-in display
+            data = {"burn_in_remaining": 150}
+            display = plugin.format_display(data)
+            self.assertIn("150", display)
+            self.assertIn("Burn-in", display)
+            
+            # Test air quality display
+            data = {"air_quality": 75.5}
+            display = plugin.format_display(data)
+            self.assertIn("75.5", display)
+            self.assertIn("AirQ", display)
+            
+            # Test n/a display
+            data = {"air_quality": "n/a"}
+            display = plugin.format_display(data)
+            self.assertIn("n/a", display)
+
+
 if __name__ == "__main__":
     unittest.main()

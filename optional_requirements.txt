@@ -5,3 +5,6 @@
 # Optional dependencies for keyboard activity monitoring in burn-in prevention:
 pynput  # Cross-platform keyboard monitoring (requires X11/display server)
 evdev  # Linux-specific keyboard monitoring (works in headless environments)
+
+# Optional dependency for MQTT virtual sensor:
+paho-mqtt  # MQTT client library for IoT sensor data streaming
