@@ -568,10 +568,23 @@ class TestMQTTPlugin(unittest.TestCase):
         self.mock_client = MagicMock()
         self.mqtt_module = MagicMock()
         self.mqtt_module.Client.return_value = self.mock_client
+        
+        # Patch the paho module hierarchy
+        self.paho_mock = MagicMock()
+        self.paho_mqtt_mock = MagicMock()
+        self.paho_mqtt_mock.client = self.mqtt_module
+        self.paho_mock.mqtt = self.paho_mqtt_mock
+        
+        # Create a reusable patch dict
+        self.paho_patches = {
+            "paho": self.paho_mock,
+            "paho.mqtt": self.paho_mqtt_mock,
+            "paho.mqtt.client": self.mqtt_module
+        }
 
     def test_initialization(self):
         """Test MQTT plugin initialization"""
-        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+        with patch.dict("sys.modules", self.paho_patches):
             from sensor_plugins import MQTTPlugin
 
             plugin = MQTTPlugin(broker_host="test.mosquitto.org", topic="test/topic")
@@ -581,23 +594,41 @@ class TestMQTTPlugin(unittest.TestCase):
 
     def test_connection_success(self):
         """Test successful MQTT connection"""
-        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+        # Set up a side effect to trigger on_connect callback immediately when loop_start is called
+        def trigger_on_connect_callback():
+            """Simulate immediate connection success"""
+            if hasattr(self.mock_client, 'on_connect') and callable(self.mock_client.on_connect):
+                self.mock_client.on_connect(self.mock_client, None, None, 0)
+        
+        self.mock_client.loop_start.side_effect = trigger_on_connect_callback
+        
+        with patch.dict("sys.modules", {
+            "paho": self.paho_mock,
+            "paho.mqtt": self.paho_mqtt_mock,
+            "paho.mqtt.client": self.mqtt_module
+        }):
             from sensor_plugins import MQTTPlugin
 
             plugin = MQTTPlugin()
             # Force initialization by resetting last check time
             plugin.last_check_time = 0
             result = plugin.check_availability()
-            # Connection should have been attempted
-            if result:
-                self.mock_client.connect.assert_called()
-            # Whether available or not, the test passes as connection was attempted
+            # Connection should have succeeded
+            self.assertTrue(result)
+            self.assertTrue(plugin.available)
+            self.mock_client.connect.assert_called()
+            self.mock_client.loop_start.assert_called()
+            self.mock_client.subscribe.assert_called()
 
     def test_connection_failure(self):
         """Test MQTT connection failure"""
         self.mock_client.connect.side_effect = Exception("Connection refused")
         
-        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+        with patch.dict("sys.modules", {
+            "paho": self.paho_mock,
+            "paho.mqtt": self.paho_mqtt_mock,
+            "paho.mqtt.client": self.mqtt_module
+        }):
             from sensor_plugins import MQTTPlugin
 
             plugin = MQTTPlugin()
@@ -607,9 +638,37 @@ class TestMQTTPlugin(unittest.TestCase):
             self.assertEqual(data["humidity"], "n/a")
             self.assertFalse(plugin.available)
 
+    def test_connection_timeout(self):
+        """Test MQTT connection timeout when broker doesn't respond"""
+        # Simulate connection that never completes - don't trigger on_connect callback
+        # We need to mock time to avoid actually waiting 5 seconds
+        with patch.dict("sys.modules", {
+            "paho": self.paho_mock,
+            "paho.mqtt": self.paho_mqtt_mock,
+            "paho.mqtt.client": self.mqtt_module
+        }):
+            with patch('sensor_plugins.mqtt_plugin.time') as mock_time_module:
+                # Simulate time advancing to trigger timeout
+                # Need enough iterations to exceed 5 second timeout with 0.1s sleep intervals
+                # Two initial calls (start time, first check) + 55 iterations = ~5.5 seconds
+                time_values = [0.0, 0.0] + [0.1 * i for i in range(55)]
+                mock_time_module.time.side_effect = time_values
+                mock_time_module.sleep = MagicMock()  # Don't actually sleep
+                
+                from sensor_plugins import MQTTPlugin
+
+                plugin = MQTTPlugin()
+                data = plugin.read()
+                # Should return n/a values when connection times out
+                self.assertEqual(data["temperature"], "n/a")
+                self.assertEqual(data["humidity"], "n/a")
+                self.assertFalse(plugin.available)
+                # loop_stop should have been called on timeout
+                self.mock_client.loop_stop.assert_called()
+
     def test_parse_bme68x_data(self):
         """Test parsing BME68x data from MQTT message"""
-        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+        with patch.dict("sys.modules", self.paho_patches):
             from sensor_plugins import MQTTPlugin
 
             plugin = MQTTPlugin(burn_in_time=0)  # Skip burn-in for test
@@ -638,7 +697,7 @@ class TestMQTTPlugin(unittest.TestCase):
 
     def test_parse_multiple_sensors(self):
         """Test parsing data from multiple sensors"""
-        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+        with patch.dict("sys.modules", self.paho_patches):
             from sensor_plugins import MQTTPlugin
 
             plugin = MQTTPlugin()
@@ -664,7 +723,7 @@ class TestMQTTPlugin(unittest.TestCase):
 
     def test_no_message_received(self):
         """Test behavior when no MQTT message has been received"""
-        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+        with patch.dict("sys.modules", self.paho_patches):
             from sensor_plugins import MQTTPlugin
 
             plugin = MQTTPlugin()
@@ -680,7 +739,7 @@ class TestMQTTPlugin(unittest.TestCase):
 
     def test_air_quality_calculation(self):
         """Test BME68x air quality calculation similar to BME680Plugin"""
-        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+        with patch.dict("sys.modules", self.paho_patches):
             from sensor_plugins import MQTTPlugin
 
             plugin = MQTTPlugin(burn_in_time=0)
@@ -709,7 +768,7 @@ class TestMQTTPlugin(unittest.TestCase):
 
     def test_requires_background_updates(self):
         """Test that MQTT plugin requires background updates"""
-        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+        with patch.dict("sys.modules", self.paho_patches):
             from sensor_plugins import MQTTPlugin
 
             plugin = MQTTPlugin()
@@ -717,7 +776,7 @@ class TestMQTTPlugin(unittest.TestCase):
 
     def test_format_display(self):
         """Test display formatting"""
-        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+        with patch.dict("sys.modules", self.paho_patches):
             from sensor_plugins import MQTTPlugin
 
             plugin = MQTTPlugin()
