@@ -80,7 +80,11 @@ class MQTTPlugin(SensorPlugin):
         try:
             client.connect(self.broker_host, self.broker_port, keepalive=60)
         except Exception:
-            raise RuntimeError(f"Could not connect to MQTT broker at {self.broker_host}:{self.broker_port}")
+            error_msg = (
+                f"Could not connect to MQTT broker at "
+                f"{self.broker_host}:{self.broker_port}"
+            )
+            raise RuntimeError(error_msg)
         
         # Start the network loop in a background thread
         client.loop_start()
