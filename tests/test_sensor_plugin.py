@@ -560,5 +560,266 @@ class TestKeyboardPlugin(unittest.TestCase):
             self.assertEqual(data["last_keys"], "n/a")
 
 
+class TestMQTTPlugin(unittest.TestCase):
+    """Test MQTT sensor plugin"""
+
+    def setUp(self):
+        """Set up mock MQTT client"""
+        self.mock_client = MagicMock()
+        self.mqtt_module = MagicMock()
+        self.mqtt_module.Client.return_value = self.mock_client
+        
+        # Patch the paho module hierarchy
+        self.paho_mock = MagicMock()
+        self.paho_mqtt_mock = MagicMock()
+        self.paho_mqtt_mock.client = self.mqtt_module
+        self.paho_mock.mqtt = self.paho_mqtt_mock
+        
+        # Create a reusable patch dict
+        self.paho_patches = {
+            "paho": self.paho_mock,
+            "paho.mqtt": self.paho_mqtt_mock,
+            "paho.mqtt.client": self.mqtt_module
+        }
+
+    def test_initialization(self):
+        """Test MQTT plugin initialization"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin(broker_host="test.mosquitto.org", topic="test/topic")
+            self.assertEqual(plugin.name, "MQTT")
+            self.assertEqual(plugin.broker_host, "test.mosquitto.org")
+            self.assertEqual(plugin.topic, "test/topic")
+
+    def test_connection_success(self):
+        """Test successful MQTT connection"""
+        # Set up a side effect to trigger on_connect callback immediately when loop_start is called
+        def trigger_on_connect_callback():
+            """Simulate immediate connection success"""
+            if hasattr(self.mock_client, 'on_connect') and callable(self.mock_client.on_connect):
+                self.mock_client.on_connect(self.mock_client, None, None, 0)
+        
+        self.mock_client.loop_start.side_effect = trigger_on_connect_callback
+        
+        with patch.dict("sys.modules", {
+            "paho": self.paho_mock,
+            "paho.mqtt": self.paho_mqtt_mock,
+            "paho.mqtt.client": self.mqtt_module
+        }):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            # Force initialization by resetting last check time
+            plugin.last_check_time = 0
+            result = plugin.check_availability()
+            # Connection should have succeeded
+            self.assertTrue(result)
+            self.assertTrue(plugin.available)
+            self.mock_client.connect.assert_called()
+            self.mock_client.loop_start.assert_called()
+            self.mock_client.subscribe.assert_called()
+
+    def test_connection_failure(self):
+        """Test MQTT connection failure"""
+        self.mock_client.connect.side_effect = Exception("Connection refused")
+        
+        with patch.dict("sys.modules", {
+            "paho": self.paho_mock,
+            "paho.mqtt": self.paho_mqtt_mock,
+            "paho.mqtt.client": self.mqtt_module
+        }):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            data = plugin.read()
+            # Should return n/a values when connection fails
+            self.assertEqual(data["temperature"], "n/a")
+            self.assertEqual(data["humidity"], "n/a")
+            self.assertFalse(plugin.available)
+
+    def test_connection_timeout(self):
+        """Test MQTT connection timeout when broker doesn't respond"""
+        # Simulate connection that never completes - don't trigger on_connect callback
+        # We need to mock time to avoid actually waiting 5 seconds
+        with patch.dict("sys.modules", {
+            "paho": self.paho_mock,
+            "paho.mqtt": self.paho_mqtt_mock,
+            "paho.mqtt.client": self.mqtt_module
+        }):
+            with patch('sensor_plugins.mqtt_plugin.time') as mock_time_module:
+                # Simulate time advancing to trigger timeout
+                # Need enough iterations to exceed 5 second timeout with 0.1s sleep intervals
+                # Two initial calls (start time, first check) + 55 iterations = ~5.5 seconds
+                time_values = [0.0, 0.0] + [0.1 * i for i in range(55)]
+                mock_time_module.time.side_effect = time_values
+                mock_time_module.sleep = MagicMock()  # Don't actually sleep
+                
+                from sensor_plugins import MQTTPlugin
+
+                plugin = MQTTPlugin()
+                data = plugin.read()
+                # Should return n/a values when connection times out
+                self.assertEqual(data["temperature"], "n/a")
+                self.assertEqual(data["humidity"], "n/a")
+                self.assertFalse(plugin.available)
+                # loop_stop should have been called on timeout
+                self.mock_client.loop_stop.assert_called()
+
+    def test_parse_bme68x_data(self):
+        """Test parsing BME68x data from MQTT message"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin(burn_in_time=0)  # Skip burn-in for test
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.burn_in_complete = True
+            plugin.gas_baseline = 100000
+            
+            # Simulate received message
+            plugin.message_received = True
+            plugin.latest_message = {
+                "BME68x": {
+                    "Humidity": 36.19836,
+                    "TemperatureC": 22.40555,
+                    "Pressure": 99244.27,
+                    "Gas Resistance": 29463.11,
+                }
+            }
+            
+            data = plugin._read_sensor_data()
+            self.assertEqual(data["temperature"], 22.40555)
+            self.assertEqual(data["humidity"], 36.19836)
+            self.assertEqual(data["pressure"], 99244.27)
+            self.assertEqual(data["gas_resistance"], 29463.11)
+            self.assertNotEqual(data["air_quality"], "n/a")
+
+    def test_parse_multiple_sensors(self):
+        """Test parsing data from multiple sensors"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+            # Note: Test data uses actual values from real sensor payload (issue example)
+            # Values like SOC > 100% and RSSI = 198 are non-standard but match real data
+            plugin.latest_message = {
+                "VEML7700": {"Lux": 50.688},
+                "TMP117": {"Temperature (C)": 22.375},
+                "MAX17048": {"Voltage (V)": 4.21, "State Of Charge (%)": 108.8906},
+                "System Info": {"SSID": "vfExpress", "RSSI": 198},
+            }
+
+            data = plugin._read_sensor_data()
+            self.assertEqual(data["light"], 50.688)
+            self.assertEqual(data["temp_c"], 22.375)
+            self.assertEqual(data["voltage"], 4.21)
+            self.assertEqual(data["soc"], 108.8906)
+            self.assertEqual(data["ssid"], "vfExpress")
+            self.assertEqual(data["rssi"], 198)
+
+    def test_no_message_received(self):
+        """Test behavior when no MQTT message has been received"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = False
+            
+            data = plugin._read_sensor_data()
+            # All values should be n/a
+            self.assertEqual(data["temperature"], "n/a")
+            self.assertEqual(data["light"], "n/a")
+            self.assertEqual(data["temp_c"], "n/a")
+
+    def test_air_quality_calculation(self):
+        """Test BME68x air quality calculation similar to BME680Plugin"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin(burn_in_time=0)
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.burn_in_complete = True
+            plugin.gas_baseline = 50000
+            plugin.message_received = True
+            
+            # Test with good air quality (gas resistance near baseline)
+            plugin.latest_message = {
+                "BME68x": {
+                    "Humidity": 40.0,
+                    "TemperatureC": 22.0,
+                    "Pressure": 1013.25,
+                    "Gas Resistance": 50000,
+                }
+            }
+            
+            data = plugin._read_sensor_data()
+            air_quality = data["air_quality"]
+            self.assertNotEqual(air_quality, "n/a")
+            self.assertIsInstance(air_quality, (int, float))
+            # Air quality should be a reasonable value (0-100 scale)
+            self.assertGreaterEqual(air_quality, 0)
+
+    def test_requires_background_updates(self):
+        """Test that MQTT plugin requires background updates"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            self.assertTrue(plugin.requires_background_updates)
+
+    def test_format_display(self):
+        """Test display formatting"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            
+            # Test burn-in display
+            data = {"burn_in_remaining": 150}
+            display = plugin.format_display(data)
+            self.assertIn("150", display)
+            self.assertIn("Burn-in", display)
+            
+            # Test air quality display
+            data = {"air_quality": 75.5}
+            display = plugin.format_display(data)
+            self.assertIn("75.5", display)
+            self.assertIn("AirQ", display)
+            
+            # Test n/a display
+            data = {"air_quality": "n/a"}
+            display = plugin.format_display(data)
+            self.assertIn("n/a", display)
+
+    def test_connection_timeout(self):
+        """Test MQTT connection timeout when broker doesn't respond"""
+        with patch.dict("sys.modules", {"paho.mqtt.client": self.mqtt_module}):
+            from sensor_plugins import MQTTPlugin
+
+            # Mock connect to succeed but loop_start doesn't trigger on_connect callback
+            # This simulates a broker that accepts connections but doesn't complete handshake
+            plugin = MQTTPlugin()
+            
+            # Force a timeout by preventing the callback from being called
+            # The timeout is 5 seconds, but we don't want tests to wait that long
+            with patch('time.time') as mock_time:
+                # First call returns 0 (start time)
+                # Second call returns 10 (past the timeout)
+                mock_time.side_effect = [0, 10]
+                
+                data = plugin.read()
+                # Should return n/a values when connection times out
+                self.assertEqual(data["temperature"], "n/a")
+                self.assertEqual(data["humidity"], "n/a")
+                self.assertFalse(plugin.available)
+
+
 if __name__ == "__main__":
     unittest.main()
