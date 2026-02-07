@@ -20,8 +20,8 @@ parses JSON sensor data including:
 The sensor is hot-pluggable - it will automatically detect when the
 MQTT broker becomes available or unavailable.
 
-The terminal output updates in place using ANSI escape codes, providing
-a clean interface that doesn't continuously scroll.
+The terminal display clears and redraws with each update using ANSI escape
+codes, providing a clean interface similar to top/htop that doesn't scroll.
 """
 
 import sys
@@ -36,9 +36,6 @@ from sensor_plugins import MQTTPlugin
 
 def main():
     """Main function to demonstrate MQTT plugin"""
-    print("MQTT Virtual Sensor Plugin Example")
-    print("=" * 50)
-    
     # Create MQTT plugin instance
     # Adjust broker_host and topic as needed
     mqtt_sensor = MQTTPlugin(
@@ -49,10 +46,18 @@ def main():
         burn_in_time=60,  # Reduced from 300s for example
     )
     
-    print(f"Connecting to MQTT broker at {mqtt_sensor.broker_host}:{mqtt_sensor.broker_port}")
-    print(f"Subscribing to topic: {mqtt_sensor.topic}")
-    print("\nExample JSON payload format:")
-    print("""{
+    # ANSI escape codes for terminal control
+    CLEAR_SCREEN = "\033[2J"  # Clear entire screen
+    HOME_CURSOR = "\033[H"    # Move cursor to home (top-left)
+    
+    def print_header():
+        """Print the static header information"""
+        print("MQTT Virtual Sensor Plugin Example")
+        print("=" * 50)
+        print(f"Connecting to MQTT broker at {mqtt_sensor.broker_host}:{mqtt_sensor.broker_port}")
+        print(f"Subscribing to topic: {mqtt_sensor.topic}")
+        print("\nExample JSON payload format:")
+        print("""{
     "System Info": {"SSID": "MyWiFi", "RSSI": 198},
     "VEML7700": {"Lux": 50.688},
     "MAX17048": {"Voltage (V)": 4.21, "State Of Charge (%)": 108.89},
@@ -64,25 +69,24 @@ def main():
         "Gas Resistance": 29463.11
     }
 }""")
-    print("\n" + "=" * 50)
-    print("Reading sensor data (Ctrl+C to exit)...")
-    print()
+        print("\n" + "=" * 50)
+        print("Reading sensor data (Ctrl+C to exit)...")
+        print()
     
-    # ANSI escape codes for terminal control
-    CLEAR_FROM_CURSOR = "\033[0J"  # Clear from cursor to end of screen
-    SAVE_CURSOR = "\033[s"  # Save cursor position
-    RESTORE_CURSOR = "\033[u"  # Restore cursor position
-    
-    # Save cursor position after the header
-    print(SAVE_CURSOR, end="", flush=True)
+    # Print initial header
+    print_header()
     
     try:
+        first_iteration = True
         while True:
             # Read sensor data
             data = mqtt_sensor.read()
             
-            # Restore cursor to saved position and clear to end
-            print(RESTORE_CURSOR + CLEAR_FROM_CURSOR, end="", flush=True)
+            # Clear screen and redraw header (skip on first iteration to avoid double print)
+            if not first_iteration:
+                print(CLEAR_SCREEN + HOME_CURSOR, end="", flush=True)
+                print_header()
+            first_iteration = False
             
             # Display the data
             print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
