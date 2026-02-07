@@ -3,7 +3,9 @@ MQTT virtual sensor plugin
 """
 
 import json
+import math
 import time
+from collections import deque
 from typing import Any, Dict, Optional
 
 from sensor_plugins.base import SensorPlugin
@@ -19,6 +21,8 @@ class MQTTPlugin(SensorPlugin):
         topic: str = "iot_logger",
         check_interval: float = 5.0,
         burn_in_time: float = 300,
+        mag_moving_average_samples: int = 20,
+        mag_detection_threshold: float = 2.0,
     ):
         """
         Initialize MQTT sensor plugin
@@ -28,6 +32,8 @@ class MQTTPlugin(SensorPlugin):
         :param topic: MQTT topic to subscribe to
         :param check_interval: How often to check if MQTT is available
         :param burn_in_time: BME68x burn-in period in seconds
+        :param mag_moving_average_samples: Number of samples for magnetic baseline
+        :param mag_detection_threshold: Multiplier for magnet detection
         """
         super().__init__("MQTT", check_interval)
         self.broker_host = broker_host
@@ -44,6 +50,12 @@ class MQTTPlugin(SensorPlugin):
         self.hum_baseline = 40.0  # Must be > 0 and < 100
         self.hum_weighting = 0.25
         self.burn_in_complete = False
+        
+        # MMC5983 magnet detection state
+        self.mag_moving_average_samples = mag_moving_average_samples
+        self.mag_detection_threshold = mag_detection_threshold
+        self.magnitude_history = deque(maxlen=mag_moving_average_samples)
+        self.mag_baseline = None
 
     @property
     def requires_background_updates(self) -> bool:
@@ -113,7 +125,7 @@ class MQTTPlugin(SensorPlugin):
         
         return client
 
-    def _read_sensor_data(self) -> Dict[str, Any]:
+    def _read_sensor_data(self) -> Dict[str, Any]:  # noqa: PLR0914 - Complex sensor data extraction method
         """Read data from latest MQTT message"""
         result = {
             "temperature": "n/a",
@@ -131,6 +143,13 @@ class MQTTPlugin(SensorPlugin):
             "motion_value": "n/a",
             "sths34_temperature": "n/a",
             "person_detected": "n/a",
+            "mag_x": "n/a",
+            "mag_y": "n/a",
+            "mag_z": "n/a",
+            "mag_magnitude": "n/a",
+            "mag_temperature": "n/a",
+            "magnet_detected": "n/a",
+            "mag_baseline": "n/a",
         }
 
         if not self.message_received or self.latest_message is None:
@@ -263,6 +282,46 @@ class MQTTPlugin(SensorPlugin):
             elif result["motion_value"] != "n/a":
                 result["person_detected"] = result["motion_value"] > 0
 
+        # Extract MMC5983 magnetometer data
+        if "MMC5983" in self.latest_message:
+            mmc_data = self.latest_message["MMC5983"]
+            if "X Field (Gauss)" in mmc_data:
+                result["mag_x"] = mmc_data["X Field (Gauss)"]
+            if "Y Field (Gauss)" in mmc_data:
+                result["mag_y"] = mmc_data["Y Field (Gauss)"]
+            if "Z Field (Gauss)" in mmc_data:
+                result["mag_z"] = mmc_data["Z Field (Gauss)"]
+            if "Temperature (C)" in mmc_data:
+                result["mag_temperature"] = mmc_data["Temperature (C)"]
+            
+            # Calculate magnitude and detect magnet if we have all 3 axes
+            if (
+                result["mag_x"] != "n/a"
+                and result["mag_y"] != "n/a"
+                and result["mag_z"] != "n/a"
+            ):
+                # Calculate 3D magnitude
+                magnitude = math.sqrt(
+                    result["mag_x"] ** 2
+                    + result["mag_y"] ** 2
+                    + result["mag_z"] ** 2
+                )
+                result["mag_magnitude"] = magnitude
+                
+                # Update moving average baseline
+                self.magnitude_history.append(magnitude)
+                if len(self.magnitude_history) > 0:
+                    self.mag_baseline = sum(self.magnitude_history) / len(
+                        self.magnitude_history
+                    )
+                    result["mag_baseline"] = self.mag_baseline
+                
+                # Detect magnet based on deviation from baseline
+                if self.mag_baseline is not None:
+                    result["magnet_detected"] = (
+                        magnitude > self.mag_baseline * self.mag_detection_threshold
+                    )
+
         return result
 
     def _get_unavailable_data(self) -> Dict[str, Any]:
@@ -283,6 +342,13 @@ class MQTTPlugin(SensorPlugin):
             "motion_value": "n/a",
             "sths34_temperature": "n/a",
             "person_detected": "n/a",
+            "mag_x": "n/a",
+            "mag_y": "n/a",
+            "mag_z": "n/a",
+            "mag_magnitude": "n/a",
+            "mag_temperature": "n/a",
+            "magnet_detected": "n/a",
+            "mag_baseline": "n/a",
         }
 
     def format_display(self, data: Dict[str, Any]) -> str:

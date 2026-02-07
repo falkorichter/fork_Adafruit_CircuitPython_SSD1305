@@ -1028,5 +1028,327 @@ class TestSTHS34PF80Plugin(unittest.TestCase):
             self.assertIn("n/a", display)
 
 
+class TestMMC5983Plugin(unittest.TestCase):
+    """Test MMC5983 magnetometer sensor plugin"""
+
+    def setUp(self):
+        """Set up mock sensor"""
+        self.mock_sensor = MagicMock()
+        self.mock_sensor.magnetic = (-0.38, -0.79, -0.64)
+        self.mock_sensor.temperature = 16.0
+
+        self.mmc_module = MagicMock()
+        self.mmc_module.MMC5983.return_value = self.mock_sensor
+
+        self.board_module = MagicMock()
+
+    def test_read_magnetic_data(self):
+        """Test reading magnetic field data from MMC5983"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin()
+            data = plugin.read()
+            self.assertEqual(data["mag_x"], -0.38)
+            self.assertEqual(data["mag_y"], -0.79)
+            self.assertEqual(data["mag_z"], -0.64)
+            self.assertEqual(data["temperature"], 16.0)
+            # Check magnitude is calculated correctly
+            self.assertIsInstance(data["magnitude"], float)
+            self.assertGreater(data["magnitude"], 0)
+
+    def test_magnitude_calculation(self):
+        """Test 3D vector magnitude calculation"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin()
+            # Test with known values: sqrt(3^2 + 4^2 + 0^2) = 5
+            magnitude = plugin._calculate_magnitude(3.0, 4.0, 0.0)
+            self.assertAlmostEqual(magnitude, 5.0, places=5)
+
+    def test_baseline_calculation(self):
+        """Test moving average baseline calculation"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin(moving_average_samples=5)
+            
+            # Initially no baseline
+            self.assertIsNone(plugin.baseline_magnitude)
+            
+            # Add samples
+            plugin._update_baseline(1.0)
+            self.assertAlmostEqual(plugin.baseline_magnitude, 1.0)
+            
+            plugin._update_baseline(2.0)
+            self.assertAlmostEqual(plugin.baseline_magnitude, 1.5)
+            
+            plugin._update_baseline(3.0)
+            self.assertAlmostEqual(plugin.baseline_magnitude, 2.0)
+
+    def test_magnet_detection(self):
+        """Test magnet proximity detection"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin(detection_threshold=2.0)
+            
+            # No detection without baseline
+            self.assertFalse(plugin._detect_magnet(5.0))
+            
+            # Set baseline to 1.0
+            plugin._update_baseline(1.0)
+            
+            # Test: 1.5 < 2.0 threshold, no detection
+            self.assertFalse(plugin._detect_magnet(1.5))
+            
+            # Test: 2.5 > 2.0 threshold, magnet detected
+            self.assertTrue(plugin._detect_magnet(2.5))
+            
+            # Test: exactly at threshold (2.0)
+            self.assertFalse(plugin._detect_magnet(2.0))
+
+    def test_magnet_detection_with_reads(self):
+        """Test magnet detection through actual sensor reads"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin(
+                moving_average_samples=3, detection_threshold=2.0
+            )
+            
+            # First read - establish baseline
+            self.mock_sensor.magnetic = (0.1, 0.0, 0.0)
+            data = plugin.read()
+            self.assertFalse(data["magnet_detected"])  # No detection yet
+            
+            # Second read - still establishing baseline
+            self.mock_sensor.magnetic = (0.1, 0.0, 0.0)
+            data = plugin.read()
+            self.assertFalse(data["magnet_detected"])
+            
+            # Third read - baseline established
+            self.mock_sensor.magnetic = (0.1, 0.0, 0.0)
+            data = plugin.read()
+            self.assertFalse(data["magnet_detected"])
+            
+            # Fourth read - strong field (magnet close)
+            self.mock_sensor.magnetic = (5.0, 0.0, 0.0)
+            data = plugin.read()
+            self.assertTrue(data["magnet_detected"])
+
+    def test_unavailable_data(self):
+        """Test MMC5983 unavailable data format"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin()
+            data = plugin._get_unavailable_data()
+            self.assertEqual(data["mag_x"], "n/a")
+            self.assertEqual(data["mag_y"], "n/a")
+            self.assertEqual(data["mag_z"], "n/a")
+            self.assertEqual(data["magnitude"], "n/a")
+            self.assertEqual(data["temperature"], "n/a")
+            self.assertEqual(data["magnet_detected"], "n/a")
+            self.assertEqual(data["baseline"], "n/a")
+
+    def test_format_display_normal(self):
+        """Test display formatting with normal field"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin()
+            data = {"magnitude": 1.5, "magnet_detected": False}
+            display = plugin.format_display(data)
+            self.assertIn("1.5", display)
+            self.assertNotIn("🧲", display)
+
+    def test_format_display_magnet_detected(self):
+        """Test display formatting when magnet is detected"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin()
+            data = {"magnitude": 5.0, "magnet_detected": True}
+            display = plugin.format_display(data)
+            self.assertIn("5.0", display)
+            self.assertIn("🧲", display)
+
+    def test_format_display_unavailable(self):
+        """Test display formatting when sensor is unavailable"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin()
+            data = plugin._get_unavailable_data()
+            display = plugin.format_display(data)
+            self.assertIn("n/a", display)
+
+    def test_requires_background_updates(self):
+        """Test that MMC5983 plugin requires background updates"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
+        ):
+            from sensor_plugins import MMC5983Plugin
+
+            plugin = MMC5983Plugin()
+            self.assertTrue(plugin.requires_background_updates)
+
+
+class TestMQTTPluginMMC5983(unittest.TestCase):
+    """Test MQTT plugin's MMC5983 data extraction"""
+
+    def setUp(self):
+        """Set up mock MQTT client"""
+        self.mock_client = MagicMock()
+        self.mqtt_module = MagicMock()
+        self.mqtt_module.Client.return_value = self.mock_client
+
+        self.paho_patches = {"paho.mqtt.client": self.mqtt_module}
+
+    def test_mmc5983_data_extraction(self):
+        """Test extracting MMC5983 data from MQTT message"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+            plugin.latest_message = {
+                "MMC5983": {
+                    "X Field (Gauss)": -0.382629,
+                    "Y Field (Gauss)": -0.799194,
+                    "Z Field (Gauss)": -0.648071,
+                    "Temperature (C)": 16,
+                }
+            }
+
+            data = plugin._read_sensor_data()
+            self.assertAlmostEqual(data["mag_x"], -0.382629, places=5)
+            self.assertAlmostEqual(data["mag_y"], -0.799194, places=5)
+            self.assertAlmostEqual(data["mag_z"], -0.648071, places=5)
+            self.assertEqual(data["mag_temperature"], 16)
+            self.assertIsInstance(data["mag_magnitude"], float)
+            self.assertGreater(data["mag_magnitude"], 0)
+
+    def test_mmc5983_magnitude_calculation(self):
+        """Test magnitude calculation in MQTT plugin"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+            plugin.latest_message = {
+                "MMC5983": {
+                    "X Field (Gauss)": 3.0,
+                    "Y Field (Gauss)": 4.0,
+                    "Z Field (Gauss)": 0.0,
+                    "Temperature (C)": 20,
+                }
+            }
+
+            data = plugin._read_sensor_data()
+            # sqrt(3^2 + 4^2 + 0^2) = 5.0
+            self.assertAlmostEqual(data["mag_magnitude"], 5.0, places=5)
+
+    def test_mmc5983_magnet_detection(self):
+        """Test magnet detection logic in MQTT plugin"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin(mag_detection_threshold=2.0)
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+
+            # First read - establish baseline (magnitude = 1.0)
+            plugin.latest_message = {
+                "MMC5983": {
+                    "X Field (Gauss)": 1.0,
+                    "Y Field (Gauss)": 0.0,
+                    "Z Field (Gauss)": 0.0,
+                    "Temperature (C)": 20,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertAlmostEqual(data["mag_baseline"], 1.0)
+            self.assertFalse(data["magnet_detected"])
+
+            # Second read - still normal (magnitude = 1.0)
+            data = plugin._read_sensor_data()
+            self.assertAlmostEqual(data["mag_baseline"], 1.0)
+            self.assertFalse(data["magnet_detected"])
+
+            # Third read - strong field (magnitude = 5.0 > 2.0 * baseline)
+            plugin.latest_message = {
+                "MMC5983": {
+                    "X Field (Gauss)": 5.0,
+                    "Y Field (Gauss)": 0.0,
+                    "Z Field (Gauss)": 0.0,
+                    "Temperature (C)": 20,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertTrue(data["magnet_detected"])
+
+    def test_mmc5983_partial_data(self):
+        """Test handling partial MMC5983 data"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+
+            # Missing Z field - should not calculate magnitude
+            plugin.latest_message = {
+                "MMC5983": {
+                    "X Field (Gauss)": 1.0,
+                    "Y Field (Gauss)": 2.0,
+                    "Temperature (C)": 20,
+                }
+            }
+
+            data = plugin._read_sensor_data()
+            self.assertEqual(data["mag_x"], 1.0)
+            self.assertEqual(data["mag_y"], 2.0)
+            self.assertEqual(data["mag_z"], "n/a")
+            self.assertEqual(data["mag_magnitude"], "n/a")
+            self.assertEqual(data["magnet_detected"], "n/a")
+
+
 if __name__ == "__main__":
     unittest.main()

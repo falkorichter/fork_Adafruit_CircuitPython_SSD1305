@@ -19,3 +19,6 @@ textual  # Modern Python framework for building sophisticated terminal UIs
 # Optional dependency for STHS34PF80 IR presence/motion sensor:
 adafruit-circuitpython-sths34pf80  # STHS34PF80 IR presence/motion sensor library
 
+# Optional dependency for MMC5983 magnetometer sensor:
+adafruit-circuitpython-mmc56x3  # MMC5983 magnetometer sensor library
+
