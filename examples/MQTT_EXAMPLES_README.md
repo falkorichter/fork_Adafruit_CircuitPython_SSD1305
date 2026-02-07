@@ -88,6 +88,44 @@ The MQTT sensor examples expect JSON messages in the following format:
 
 **Note**: Not all fields are required. The examples will display "n/a" for missing sensor data.
 
+## Supported Sensors
+
+The MQTT examples support the following sensors:
+
+### Environmental Sensors
+- **BME68x**: Temperature, humidity, pressure, gas resistance with air quality calculation
+- **VEML7700**: Ambient light sensor (lux)
+- **TMP117**: High-precision temperature sensor
+
+### Motion & Presence Sensors
+- **STHS34PF80**: IR presence and motion sensor with person detection
+
+### Magnetic Field Sensor
+- **MMC5983**: 3-axis magnetometer with automatic magnet detection
+  - Displays X, Y, Z magnetic field components (Gauss)
+  - Calculates 3D vector magnitude
+  - Uses moving average baseline (20 samples by default)
+  - Automatically detects nearby magnets (field > 2x baseline)
+  - Shows "🧲 MAGNET CLOSE 🧲" when magnet is detected
+  - Works in any direction (detects magnetic field strength, not direction)
+
+### Power & System Sensors
+- **MAX17048**: Battery voltage and state of charge
+- **System Info**: WiFi SSID, RSSI, uptime, memory usage
+
+### Magnet Detection Example
+
+The MMC5983 sensor continuously monitors the magnetic field and detects when a magnet comes close:
+
+1. **Baseline Establishment**: The sensor builds a moving average of the magnetic field magnitude over the last 20 readings
+2. **Detection**: When the current field magnitude exceeds 2× the baseline, a magnet is detected
+3. **Direction Independent**: The detection uses the 3D vector magnitude, so it works regardless of which direction the magnet approaches from
+
+Try it yourself with the test script:
+```bash
+python examples/test_mmc5983_mqtt.py
+```
+
 ### Command-Line Arguments
 
 All MQTT examples accept the following command-line arguments:
