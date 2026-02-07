@@ -19,7 +19,7 @@ from unittest.mock import MagicMock, patch
 # Add parent directory to path
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from terminal_streamer import TerminalStreamer, TerminalOutputCapture
+from terminal_streamer import TerminalOutputCapture, TerminalStreamer
 
 
 class TestTerminalStreamer(unittest.TestCase):
@@ -222,7 +222,10 @@ class TestWebSocketServer(unittest.TestCase):
         try:
             # The import will fail if websockets is not installed
             # but we've mocked it above
-            from examples.websocket_terminal_server import WebSocketTerminalServer
+            # noqa: PLC0415 - Import inside function for conditional testing
+            from examples.websocket_terminal_server import (  # noqa: PLC0415
+                WebSocketTerminalServer,
+            )
             
             server = WebSocketTerminalServer(host="localhost", port=8765)
             
@@ -237,7 +240,10 @@ class TestWebSocketServer(unittest.TestCase):
     def test_broadcast_message_format(self):
         """Test that broadcast messages are properly formatted"""
         try:
-            from examples.websocket_terminal_server import WebSocketTerminalServer
+            # noqa: PLC0415 - Import inside function for conditional testing
+            from examples.websocket_terminal_server import (  # noqa: PLC0415
+                WebSocketTerminalServer,
+            )
             
             server = WebSocketTerminalServer()
             

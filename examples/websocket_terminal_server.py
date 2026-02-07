@@ -120,7 +120,10 @@ class WebSocketTerminalServer:
         """
         # Register client
         self.clients.add(websocket)
-        print(f"Client connected from {websocket.remote_address}. Total clients: {len(self.clients)}")
+        print(
+            f"Client connected from {websocket.remote_address}. "
+            f"Total clients: {len(self.clients)}"
+        )
         
         try:
             # Send welcome message
@@ -178,26 +181,25 @@ class WebSocketTerminalServer:
 
 async def main_async(args):
     """Async main function"""
-    server = WebSocketTerminalServer(host=args.host, port=args.port)
-    
-    # Import and run the sensor script based on the type
+    # Import modules here based on script type to avoid import errors
+    # when optional dependencies are not installed
+    # noqa: PLC0415 - Import inside function for optional dependencies
     if args.script == "basic":
-        from examples import mqtt_sensor_example
-        server.run_sensor_script(
-            mqtt_sensor_example.main,
-        )
+        from examples import mqtt_sensor_example  # noqa: PLC0415
+        script_main = mqtt_sensor_example.main
     elif args.script == "rich":
-        from examples import mqtt_sensor_example_rich
-        server.run_sensor_script(
-            mqtt_sensor_example_rich.main,
-        )
+        from examples import mqtt_sensor_example_rich  # noqa: PLC0415
+        script_main = mqtt_sensor_example_rich.main
     elif args.script == "textual":
         print("Warning: Textual UI may not work well with WebSocket streaming")
         print("Consider using 'basic' or 'rich' script types instead")
-        from examples import mqtt_sensor_example_textual
-        server.run_sensor_script(
-            mqtt_sensor_example_textual.main,
-        )
+        from examples import mqtt_sensor_example_textual  # noqa: PLC0415
+        script_main = mqtt_sensor_example_textual.main
+    else:
+        raise ValueError(f"Unknown script type: {args.script}")
+    
+    server = WebSocketTerminalServer(host=args.host, port=args.port)
+    server.run_sensor_script(script_main)
     
     # Start the WebSocket server
     await server.start_server()
