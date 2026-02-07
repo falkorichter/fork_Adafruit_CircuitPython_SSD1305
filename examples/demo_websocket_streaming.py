@@ -246,12 +246,13 @@ def main():
         description="Demo: WebSocket terminal streaming with simulated MQTT data"
     )
     parser.add_argument(
-        "--host",
-        default="localhost",
-        help="WebSocket server host (default: localhost)"
+        "--ws-host",
+        default="0.0.0.0",
+        help="WebSocket server bind address - use 0.0.0.0 for all interfaces, "
+             "localhost for local only (default: 0.0.0.0)"
     )
     parser.add_argument(
-        "--port",
+        "--ws-port",
         type=int,
         default=8765,
         help="WebSocket server port (default: 8765)"
@@ -260,7 +261,7 @@ def main():
     args = parser.parse_args()
     
     # Create and run the server
-    server = WebSocketServer(host=args.host, port=args.port)
+    server = WebSocketServer(host=args.ws_host, port=args.ws_port)
     
     try:
         asyncio.run(server.start())

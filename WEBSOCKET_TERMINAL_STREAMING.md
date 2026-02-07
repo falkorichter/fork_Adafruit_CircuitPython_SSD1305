@@ -51,11 +51,17 @@ Or simply drag and drop `websocket_terminal_viewer.html` into your browser.
 
 #### Custom WebSocket Server Configuration
 
-You can customize the WebSocket server host and port:
+You can customize the WebSocket server binding address and port:
 
 ```bash
-python examples/websocket_terminal_server.py --host 0.0.0.0 --port 8765
+# Bind to all network interfaces (allows remote connections)
+python examples/websocket_terminal_server.py --ws-host 0.0.0.0 --ws-port 8765
+
+# Bind to localhost only (local connections only)
+python examples/websocket_terminal_server.py --ws-host localhost --ws-port 8765
 ```
+
+**Note**: By default, the server binds to `0.0.0.0` (all interfaces) to allow connections from other devices on your network.
 
 #### Choose Different MQTT Script Variants
 
@@ -74,13 +80,22 @@ python examples/websocket_terminal_server.py --script textual
 
 #### Custom MQTT Broker Configuration
 
-Configure the MQTT broker connection:
+Configure the MQTT broker connection (separate from WebSocket server):
 
 ```bash
+# Connect to remote MQTT broker
 python examples/websocket_terminal_server.py \
-    --mqtt-host mqtt.example.com \
+    --mqtt-host pi5-64.local \
     --mqtt-port 1883 \
     --mqtt-topic sensor/data
+
+# Full example: WebSocket on all interfaces, MQTT on remote broker
+python examples/websocket_terminal_server.py \
+    --ws-host 0.0.0.0 \
+    --ws-port 8765 \
+    --mqtt-host 192.168.1.100 \
+    --mqtt-port 1883 \
+    --script rich
 ```
 
 #### Access from Different Host
