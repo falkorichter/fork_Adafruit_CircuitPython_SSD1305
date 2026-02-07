@@ -19,3 +19,6 @@ textual  # Modern Python framework for building sophisticated terminal UIs
 # Optional dependency for STHS34PF80 IR presence/motion sensor:
 adafruit-circuitpython-sths34pf80  # STHS34PF80 IR presence/motion sensor library
 
+# Optional dependency for WebSocket terminal streaming:
+websockets  # WebSocket protocol implementation for streaming terminal output to web browsers
+

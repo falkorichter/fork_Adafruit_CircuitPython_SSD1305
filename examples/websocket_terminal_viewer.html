@@ -1,0 +1,319 @@
+<!DOCTYPE html>
+<!-- SPDX-FileCopyrightText: 2026 Adafruit Industries -->
+<!-- SPDX-License-Identifier: MIT -->
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>MQTT Terminal Stream</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Courier New', monospace;
+            background-color: #1e1e1e;
+            color: #d4d4d4;
+            padding: 20px;
+            overflow: hidden;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            height: calc(100vh - 40px);
+            display: flex;
+            flex-direction: column;
+        }
+
+        header {
+            background-color: #2d2d2d;
+            padding: 15px 20px;
+            border-radius: 8px 8px 0 0;
+            border-bottom: 2px solid #007acc;
+        }
+
+        h1 {
+            font-size: 1.5em;
+            color: #007acc;
+            margin-bottom: 5px;
+        }
+
+        .status {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.9em;
+            margin-top: 10px;
+        }
+
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+            background-color: #f44336;
+            transition: background-color 0.3s;
+        }
+
+        .status-indicator.connected {
+            background-color: #4caf50;
+        }
+
+        .terminal-container {
+            flex: 1;
+            background-color: #0c0c0c;
+            border-radius: 0 0 8px 8px;
+            padding: 20px;
+            overflow-y: auto;
+            overflow-x: auto;
+            font-size: 14px;
+            line-height: 1.4;
+            white-space: pre-wrap;
+            word-wrap: break-word;
+        }
+
+        .terminal-output {
+            color: #d4d4d4;
+        }
+
+        /* ANSI color codes - Basic 16 colors */
+        .ansi-black { color: #000000; }
+        .ansi-red { color: #cd3131; }
+        .ansi-green { color: #0dbc79; }
+        .ansi-yellow { color: #e5e510; }
+        .ansi-blue { color: #2472c8; }
+        .ansi-magenta { color: #bc3fbc; }
+        .ansi-cyan { color: #11a8cd; }
+        .ansi-white { color: #e5e5e5; }
+        .ansi-bright-black { color: #666666; }
+        .ansi-bright-red { color: #f14c4c; }
+        .ansi-bright-green { color: #23d18b; }
+        .ansi-bright-yellow { color: #f5f543; }
+        .ansi-bright-blue { color: #3b8eea; }
+        .ansi-bright-magenta { color: #d670d6; }
+        .ansi-bright-cyan { color: #29b8db; }
+        .ansi-bright-white { color: #ffffff; }
+
+        /* ANSI styles */
+        .ansi-bold { font-weight: bold; }
+        .ansi-dim { opacity: 0.6; }
+        .ansi-italic { font-style: italic; }
+        .ansi-underline { text-decoration: underline; }
+
+        /* Scrollbar styling */
+        .terminal-container::-webkit-scrollbar {
+            width: 12px;
+        }
+
+        .terminal-container::-webkit-scrollbar-track {
+            background: #1e1e1e;
+        }
+
+        .terminal-container::-webkit-scrollbar-thumb {
+            background: #555;
+            border-radius: 6px;
+        }
+
+        .terminal-container::-webkit-scrollbar-thumb:hover {
+            background: #777;
+        }
+
+        /* Controls */
+        .controls {
+            display: flex;
+            gap: 10px;
+            margin-top: 10px;
+        }
+
+        button {
+            background-color: #007acc;
+            color: white;
+            border: none;
+            padding: 8px 16px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-family: 'Courier New', monospace;
+            font-size: 0.9em;
+            transition: background-color 0.2s;
+        }
+
+        button:hover {
+            background-color: #005a9e;
+        }
+
+        button:active {
+            background-color: #004578;
+        }
+
+        button:disabled {
+            background-color: #555;
+            cursor: not-allowed;
+        }
+
+        .info-message {
+            color: #4caf50;
+            font-style: italic;
+        }
+
+        .error-message {
+            color: #f44336;
+            font-weight: bold;
+        }
+
+        .connection-url {
+            color: #007acc;
+            margin-top: 5px;
+            font-size: 0.85em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>🖥️ MQTT Terminal Stream</h1>
+            <div class="status">
+                <span class="status-indicator" id="statusIndicator"></span>
+                <span id="statusText">Disconnected</span>
+            </div>
+            <div class="connection-url" id="connectionUrl"></div>
+            <div class="controls">
+                <button id="connectBtn" onclick="connect()">Connect</button>
+                <button id="disconnectBtn" onclick="disconnect()" disabled>Disconnect</button>
+                <button onclick="clearTerminal()">Clear</button>
+                <button onclick="toggleAutoScroll()" id="autoScrollBtn">Auto-scroll: ON</button>
+            </div>
+        </header>
+        <div class="terminal-container" id="terminal">
+            <div class="terminal-output" id="output">
+                <span class="info-message">Waiting for connection...</span>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let ws = null;
+        let autoScroll = true;
+        let wsUrl = 'ws://localhost:8765';
+
+        // Get WebSocket URL from query parameter or use default
+        const urlParams = new URLSearchParams(window.location.search);
+        const wsHost = urlParams.get('ws_host') || 'localhost';
+        const wsPort = urlParams.get('ws_port') || '8765';
+        wsUrl = `ws://${wsHost}:${wsPort}`;
+
+        document.getElementById('connectionUrl').textContent = `Connecting to: ${wsUrl}`;
+
+        function updateStatus(connected) {
+            const indicator = document.getElementById('statusIndicator');
+            const statusText = document.getElementById('statusText');
+            const connectBtn = document.getElementById('connectBtn');
+            const disconnectBtn = document.getElementById('disconnectBtn');
+
+            if (connected) {
+                indicator.classList.add('connected');
+                statusText.textContent = 'Connected';
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+            } else {
+                indicator.classList.remove('connected');
+                statusText.textContent = 'Disconnected';
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+            }
+        }
+
+        function connect() {
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                return;
+            }
+
+            addOutput('<span class="info-message">Connecting to ' + wsUrl + '...</span>\n');
+
+            ws = new WebSocket(wsUrl);
+
+            ws.onopen = function() {
+                addOutput('<span class="info-message">Connected successfully!</span>\n');
+                updateStatus(true);
+            };
+
+            ws.onmessage = function(event) {
+                try {
+                    const message = JSON.parse(event.data);
+                    if (message.type === 'output') {
+                        addOutput(escapeHtml(message.data));
+                    } else if (message.type === 'info') {
+                        addOutput('<span class="info-message">' + escapeHtml(message.data) + '</span>\n');
+                    }
+                } catch (e) {
+                    addOutput(escapeHtml(event.data));
+                }
+            };
+
+            ws.onerror = function(error) {
+                addOutput('<span class="error-message">WebSocket error occurred</span>\n');
+                console.error('WebSocket error:', error);
+            };
+
+            ws.onclose = function() {
+                addOutput('<span class="info-message">Connection closed</span>\n');
+                updateStatus(false);
+            };
+        }
+
+        function disconnect() {
+            if (ws) {
+                ws.close();
+                ws = null;
+            }
+        }
+
+        function addOutput(text) {
+            const output = document.getElementById('output');
+            const terminal = document.getElementById('terminal');
+            
+            // Create a temporary div to hold the new content
+            const temp = document.createElement('span');
+            temp.innerHTML = text;
+            
+            output.appendChild(temp);
+
+            // Auto-scroll to bottom if enabled
+            if (autoScroll) {
+                terminal.scrollTop = terminal.scrollHeight;
+            }
+        }
+
+        function clearTerminal() {
+            const output = document.getElementById('output');
+            output.innerHTML = '';
+        }
+
+        function toggleAutoScroll() {
+            autoScroll = !autoScroll;
+            const btn = document.getElementById('autoScrollBtn');
+            btn.textContent = 'Auto-scroll: ' + (autoScroll ? 'ON' : 'OFF');
+        }
+
+        function escapeHtml(text) {
+            const div = document.createElement('div');
+            div.textContent = text;
+            return div.innerHTML;
+        }
+
+        // Auto-connect on load
+        window.addEventListener('load', function() {
+            connect();
+        });
+
+        // Clean up on unload
+        window.addEventListener('beforeunload', function() {
+            if (ws) {
+                ws.close();
+            }
+        });
+    </script>
+</body>
+</html>
