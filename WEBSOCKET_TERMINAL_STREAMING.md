@@ -68,17 +68,29 @@ python examples/websocket_terminal_server.py --ws-host localhost --ws-port 8765
 The server can run different MQTT example scripts:
 
 ```bash
-# Basic ANSI terminal output (RECOMMENDED for WebSocket streaming)
+# Basic ANSI terminal output (RECOMMENDED - most reliable)
 python examples/websocket_terminal_server.py --script basic
 
-# Rich library - WARNING: Limited compatibility
+# Rich library streaming-compatible version (NEW - formatted output that works!)
+python examples/websocket_terminal_server.py --script rich-streaming
+
+# Rich library original - WARNING: Limited compatibility
 python examples/websocket_terminal_server.py --script rich
 
 # Textual TUI - WARNING: Not compatible with WebSocket streaming
 python examples/websocket_terminal_server.py --script textual
 ```
 
-**Important**: The `basic` script works best with WebSocket streaming. Rich and Textual use advanced terminal features (Live display, alternate screen buffers) that bypass standard stdout capture and won't stream properly to the browser.
+**Script Comparison:**
+
+| Script | WebSocket Compatible | Features | Best For |
+|--------|---------------------|----------|----------|
+| `basic` | ✅ Yes | Plain ANSI, simple | Reliability, debugging |
+| `rich-streaming` | ✅ Yes | Rich tables, colors, panels | Best visual experience |
+| `rich` | ❌ No | Live display, animations | Terminal-only use |
+| `textual` | ❌ No | Full TUI, interactive | Terminal-only use |
+
+**New**: See [`RICH_WEBSOCKET_PLAN.md`](RICH_WEBSOCKET_PLAN.md) for technical details on how Rich streaming works and future enhancement plans.
 
 #### Debug Mode
 
@@ -246,28 +258,35 @@ python examples/websocket_terminal_server.py
 
 ### Rich/Textual Output Not Displaying Correctly
 
-**Rich and Textual are not compatible with WebSocket streaming.** These libraries use advanced terminal features:
-
-- **Rich Live display**: Uses ANSI escape codes and direct terminal access that bypass stdout capture
-- **Textual**: Uses alternate screen buffers and curses-like interfaces that can't be captured
-
-**Solution**: Use `--script basic` for reliable WebSocket streaming:
+**Rich streaming-compatible version is now available!** Use `--script rich-streaming` for Rich output that works with WebSocket streaming.
 
 ```bash
-python examples/websocket_terminal_server.py --mqtt-host your-broker --script basic
+python examples/websocket_terminal_server.py --mqtt-host your-broker --script rich-streaming
 ```
 
-**Why this happens**: 
-- Rich's `Live` context manager writes directly to the terminal, not stdout
+**Why the original Rich script doesn't work:**
+- Rich's `Live` display writes directly to the terminal device, not stdout
 - The TerminalStreamer captures stdout/stderr, but Rich bypasses this
-- Basic ANSI output uses `print()` statements which are properly captured
+- Result: You see connection messages but no sensor data
+
+**Solutions:**
+
+1. **Use rich-streaming** (recommended): Optimized Rich script that works with WebSocket
+2. **Use basic**: Simple ANSI output, always works
+3. **Run Rich locally**: Use `python examples/mqtt_sensor_example_rich.py` for terminal-only viewing
+
+**For more details**, see [`RICH_WEBSOCKET_PLAN.md`](RICH_WEBSOCKET_PLAN.md) which outlines:
+- Why Rich doesn't work by default
+- How the streaming version solves it
+- Future enhancement options (HTML export, etc.)
+- Implementation details and trade-offs
 
 **To debug Rich issues**:
 ```bash
-python examples/websocket_terminal_server.py --debug --script rich --mqtt-host your-broker
+python examples/websocket_terminal_server.py --debug --script rich-streaming --mqtt-host your-broker
 ```
 
-The debug output will show if broadcasts are happening but not being captured.
+The debug output will show if broadcasts are happening correctly.
 
 ## End-to-End Testing
 
