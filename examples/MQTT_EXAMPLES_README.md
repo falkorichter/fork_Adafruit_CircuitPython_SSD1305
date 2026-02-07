@@ -4,6 +4,19 @@ This directory contains multiple implementations of the MQTT sensor monitor exam
 
 ## Quick Start
 
+All examples support command-line arguments to configure the MQTT broker:
+
+```bash
+# Use default settings (localhost:1883, topic: iot_logger)
+python examples/mqtt_sensor_example.py
+
+# Specify custom broker, port, and topic
+python examples/mqtt_sensor_example.py --host 192.168.1.100 --port 1883 --topic sensors/data
+
+# See all available options
+python examples/mqtt_sensor_example.py --help
+```
+
 ### Option 1: Basic Version (No Dependencies)
 ```bash
 python examples/mqtt_sensor_example.py
@@ -12,7 +25,7 @@ python examples/mqtt_sensor_example.py
 ### Option 2: Rich UI Version (Recommended) ⭐
 ```bash
 pip install rich
-python examples/mqtt_sensor_example_rich.py
+python examples/mqtt_sensor_example_rich.py --host your-broker-ip
 ```
 
 Or try the demo without an MQTT broker:
@@ -24,12 +37,32 @@ python examples/demo_rich_ui.py
 ### Option 3: Textual TUI Version
 ```bash
 pip install textual
-python examples/mqtt_sensor_example_textual.py
+python examples/mqtt_sensor_example_textual.py --host your-broker-ip
 ```
 
 ### Install All Optional Dependencies
 ```bash
 pip install -r optional_requirements.txt
+```
+
+### Command-Line Arguments
+
+All MQTT examples accept the following command-line arguments:
+
+- `--host HOST` - MQTT broker hostname or IP address (default: `localhost`)
+- `--port PORT` - MQTT broker port (default: `1883`)
+- `--topic TOPIC` - MQTT topic to subscribe to (default: `iot_logger`)
+
+**Examples:**
+```bash
+# Connect to a specific broker
+python examples/mqtt_sensor_example_rich.py --host 192.168.178.98
+
+# Use a different port
+python examples/mqtt_sensor_example.py --host broker.example.com --port 8883
+
+# Subscribe to a different topic
+python examples/mqtt_sensor_example_textual.py --topic home/sensors
 ```
 
 ---
@@ -131,16 +164,23 @@ This script tests three methods:
 
 ## Configuration
 
-All versions use the same MQTT configuration. Edit the following in the script:
+All versions support command-line arguments for easy configuration (see Command-Line Arguments section above).
+
+You can also configure additional parameters by modifying the script:
 
 ```python
 mqtt_sensor = MQTTPlugin(
-    broker_host="localhost",  # Change to your MQTT broker IP/hostname
-    broker_port=1883,         # MQTT broker port
-    topic="iot_logger",       # Topic to subscribe to
-    check_interval=5.0,       # How often to check sensor availability
-    burn_in_time=60,          # Air quality sensor burn-in period
+    broker_host=args.host,        # Set via --host argument
+    broker_port=args.port,        # Set via --port argument
+    topic=args.topic,             # Set via --topic argument
+    check_interval=5.0,           # How often to check sensor availability
+    burn_in_time=60,              # Air quality sensor burn-in period
 )
+```
+
+**Recommended:** Use command-line arguments instead of editing the script:
+```bash
+python examples/mqtt_sensor_example.py --host your-broker --port 1883 --topic your-topic
 ```
 
 ## Example MQTT Payload

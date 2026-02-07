@@ -13,6 +13,7 @@ Uses alternate screen buffer so it doesn't pollute terminal history.
 Requires: pip install textual
 """
 
+import argparse
 import sys
 from datetime import datetime
 from pathlib import Path
@@ -204,11 +205,33 @@ class MQTTSensorApp(App):
 
 def main():
     """Main function to run the Textual app"""
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="MQTT Virtual Sensor Plugin Example with Textual TUI"
+    )
+    parser.add_argument(
+        "--host",
+        default="localhost",
+        help="MQTT broker hostname or IP address (default: localhost)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=1883,
+        help="MQTT broker port (default: 1883)"
+    )
+    parser.add_argument(
+        "--topic",
+        default="iot_logger",
+        help="MQTT topic to subscribe to (default: iot_logger)"
+    )
+    args = parser.parse_args()
+    
     # Create MQTT plugin instance
     mqtt_sensor = MQTTPlugin(
-        broker_host="localhost",  # Change to your MQTT broker
-        broker_port=1883,
-        topic="iot_logger",  # Change to your topic
+        broker_host=args.host,
+        broker_port=args.port,
+        topic=args.topic,
         check_interval=5.0,
         burn_in_time=60,  # Reduced from 300s for example
     )

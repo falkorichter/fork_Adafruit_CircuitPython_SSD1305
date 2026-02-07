@@ -24,6 +24,7 @@ The terminal display clears and redraws with each update using ANSI escape
 codes, providing a clean interface similar to top/htop that doesn't scroll.
 """
 
+import argparse
 import sys
 import time
 from pathlib import Path
@@ -36,12 +37,33 @@ from sensor_plugins import MQTTPlugin
 
 def main():
     """Main function to demonstrate MQTT plugin"""
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="MQTT Virtual Sensor Plugin Example with ANSI terminal display"
+    )
+    parser.add_argument(
+        "--host",
+        default="localhost",
+        help="MQTT broker hostname or IP address (default: localhost)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=1883,
+        help="MQTT broker port (default: 1883)"
+    )
+    parser.add_argument(
+        "--topic",
+        default="iot_logger",
+        help="MQTT topic to subscribe to (default: iot_logger)"
+    )
+    args = parser.parse_args()
+    
     # Create MQTT plugin instance
-    # Adjust broker_host and topic as needed
     mqtt_sensor = MQTTPlugin(
-        broker_host="localhost",  # Change to your MQTT broker
-        broker_port=1883,
-        topic="iot_logger",  # Change to your topic
+        broker_host=args.host,
+        broker_port=args.port,
+        topic=args.topic,
         check_interval=5.0,
         burn_in_time=60,  # Reduced from 300s for example
     )
