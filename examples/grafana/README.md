@@ -144,7 +144,7 @@ Both dashboards provide 8 sensor visualization panels:
 - Uses `datasource: null` (select datasource during import)
 - Simpler Flux queries for easier customization
 - No measurement filters (works with any MQTT data structure)
-- Queries specific fields: `BME68x_TemperatureC`, `BME68x_Humidity`, `air_quality`, etc.
+- Queries calculated fields: `air_quality_score`, `magnet_detected`, `person_detected`, etc.
 
 **dashboard.json** (Full-featured):
 - Uses templated datasource variable `${DS_INFLUXDB}`
@@ -153,6 +153,26 @@ Both dashboards provide 8 sensor visualization panels:
 - Requires exact field names from telegraf.conf
 
 ## 🔧 Custom Processing
+
+### Field Reference
+
+Telegraf processes MQTT sensor data and creates the following fields:
+
+**Raw Sensor Fields** (passed through from MQTT):
+- `BME68x_TemperatureC` - Temperature in Celsius
+- `BME68x_Humidity` - Relative humidity percentage
+- `BME68x_Gas Resistance` - Gas sensor resistance (Ohms)
+- `VEML7700_Lux` - Light level in lux
+- `MMC5983_X Field (Gauss)`, `MMC5983_Y Field (Gauss)`, `MMC5983_Z Field (Gauss)` - Magnetic field components
+- `STHS34PF80_PresenceValue`, `STHS34PF80_MotionValue` - IR presence sensor readings
+
+**Calculated Fields** (created by Starlark processors):
+- `air_quality_score` - BME680 air quality (0-100, higher is better)
+- `gas_baseline` - Rolling average of gas resistance (for air quality calculation)
+- `mag_magnitude` - 3D magnetic field magnitude in µT
+- `mag_baseline` - Rolling average of magnetic field magnitude
+- `magnet_detected` - Binary flag (0 or 1) indicating nearby magnet
+- `person_detected` - Binary flag (0 or 1) indicating person presence
 
 ### Air Quality Calculation
 
@@ -433,11 +453,14 @@ If field names don't match, edit each panel:
 The queries expect these field names (set in telegraf.conf):
 - `BME68x_TemperatureC` - Temperature in Celsius
 - `BME68x_Humidity` - Humidity percentage  
-- `air_quality` - Air quality score (0-100)
+- `air_quality_score` - Air quality score (0-100)
 - `VEML7700_Lux` - Light level in lux
 - `mag_magnitude` - Magnetic field magnitude
 - `mag_baseline` - Magnetic field baseline
 - `magnet_detected` - Magnet detection flag (0/1)
+- `person_detected` - Person detection flag (0/1)
+
+**Note**: The field is named `air_quality_score` (not `air_quality`). If queries show no data, verify field names with the command in step 3 above.
 - `person_detected` - Person detection flag (0/1)
 
 ### After pulling code updates
