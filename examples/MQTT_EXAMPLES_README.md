@@ -28,12 +28,6 @@ pip install rich
 python examples/mqtt_sensor_example_rich.py --host your-broker-ip
 ```
 
-Or try the demo without an MQTT broker:
-```bash
-pip install rich
-python examples/demo_rich_ui.py
-```
-
 ### Option 3: Textual TUI Version
 ```bash
 pip install textual

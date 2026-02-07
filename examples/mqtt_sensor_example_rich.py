@@ -70,19 +70,19 @@ def create_header_panel(mqtt_sensor):
     return Panel(header_text, title="Configuration", border_style="blue")
 
 
-def create_sensor_table(data):
-    """Create a table with current sensor data"""
-    table = Table(title="Sensor Readings", show_header=True, header_style="bold magenta")
-    table.add_column("Sensor", style="cyan", width=20)
-    table.add_column("Value", style="green", width=30)
+def create_sensor_table_left(data):
+    """Create left column table with environmental sensors"""
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_column("Sensor", style="cyan", width=18)
+    table.add_column("Value", style="green", width=25)
     
     # Timestamp
     timestamp = time.strftime('%Y-%m-%d %H:%M:%S')
-    table.add_row("Timestamp", timestamp)
+    table.add_row("[bold]Timestamp[/bold]", timestamp)
+    table.add_row("", "")
     
     # BME68x environmental data
-    table.add_row("", "")  # Spacer
-    table.add_row("[bold]BME68x Environmental[/bold]", "")
+    table.add_row("[bold magenta]BME68x Environmental[/bold magenta]", "")
     table.add_row("  Temperature", f"{data['temperature']} °C")
     table.add_row("  Humidity", f"{data['humidity']} %")
     table.add_row("  Pressure", f"{data['pressure']} Pa")
@@ -105,58 +105,81 @@ def create_sensor_table(data):
             aq_display = f"[red]{aq}[/red]"
         table.add_row("  Air Quality", aq_display)
     
-    # Other sensors
-    table.add_row("", "")  # Spacer
-    table.add_row("[bold]Light Sensor[/bold]", "")
+    table.add_row("", "")
+    
+    # Light sensor
+    table.add_row("[bold magenta]Light Sensor[/bold magenta]", "")
     table.add_row("  VEML7700", f"{data['light']} lux")
     
-    table.add_row("", "")  # Spacer
-    table.add_row("[bold]Temperature Sensor[/bold]", "")
+    table.add_row("", "")
+    
+    # Temperature sensor
+    table.add_row("[bold magenta]Temperature Sensor[/bold magenta]", "")
     table.add_row("  TMP117", f"{data['temp_c']} °C")
-    
-    table.add_row("", "")  # Spacer
-    table.add_row("[bold]Battery Monitor[/bold]", "")
-    table.add_row("  Voltage", f"{data['voltage']} V")
-    table.add_row("  State of Charge", f"{data['soc']} %")
-    
-    table.add_row("", "")  # Spacer
-    table.add_row("[bold]WiFi Info[/bold]", "")
-    table.add_row("  SSID", f"{data['ssid']}")
-    table.add_row("  RSSI", f"{data['rssi']}")
     
     return table
 
 
-def create_status_panel(mqtt_sensor, data):
-    """Create status panel with connection and display info"""
-    if mqtt_sensor.available:
-        status = "[green]✓ Connected[/green]"
-    else:
-        status = "[red]✗ Disconnected (waiting for broker...)[/red]"
+def create_sensor_table_right(data, mqtt_sensor):
+    """Create right column table with system information"""
+    table = Table(show_header=False, box=None, padding=(0, 1))
+    table.add_column("Sensor", style="cyan", width=18)
+    table.add_column("Value", style="green", width=25)
     
+    # Battery monitor
+    table.add_row("[bold magenta]Battery Monitor[/bold magenta]", "")
+    table.add_row("  Voltage", f"{data['voltage']} V")
+    table.add_row("  State of Charge", f"{data['soc']} %")
+    
+    table.add_row("", "")
+    
+    # WiFi information
+    table.add_row("[bold magenta]WiFi Information[/bold magenta]", "")
+    table.add_row("  SSID", f"{data['ssid']}")
+    table.add_row("  RSSI", f"{data['rssi']}")
+    
+    table.add_row("", "")
+    
+    # Display text and status
     display_text = mqtt_sensor.format_display(data)
+    table.add_row("[bold magenta]Display Output[/bold magenta]", "")
+    table.add_row("  ", display_text)
     
-    status_text = f"""[bold]Connection:[/bold] {status}
-[bold]Display Text:[/bold] {display_text}"""
+    table.add_row("", "")
     
-    border_color = "green" if mqtt_sensor.available else "red"
-    return Panel(status_text, title="Status", border_style=border_color)
+    # Connection status
+    if mqtt_sensor.available:
+        table.add_row("[bold]Status[/bold]", "[green]✓ Connected[/green]")
+    else:
+        table.add_row("[bold]Status[/bold]", "[red]✗ Disconnected[/red]")
+    
+    return table
 
 
 def create_layout(mqtt_sensor, data):
-    """Create the complete layout"""
+    """Create the complete layout with 2 columns"""
     layout = Layout()
     
     # Split into header and body
     layout.split_column(
-        Layout(create_header_panel(mqtt_sensor), size=15, name="header"),
+        Layout(create_header_panel(mqtt_sensor), size=17, name="header"),
         Layout(name="body")
     )
     
-    # Split body into data and status
-    layout["body"].split_column(
-        Layout(create_sensor_table(data), name="data"),
-        Layout(create_status_panel(mqtt_sensor, data), size=5, name="status")
+    # Split body into two columns
+    left_panel = Panel(
+        create_sensor_table_left(data),
+        title="Environmental Sensors",
+        border_style="green"
+    )
+    right_panel = Panel(
+        create_sensor_table_right(data, mqtt_sensor),
+        title="System Information",
+        border_style="cyan"
+    )
+    layout["body"].split_row(
+        Layout(left_panel),
+        Layout(right_panel)
     )
     
     return layout
