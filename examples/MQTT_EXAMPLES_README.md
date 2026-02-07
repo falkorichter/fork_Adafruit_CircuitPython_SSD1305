@@ -39,6 +39,55 @@ python examples/mqtt_sensor_example_textual.py --host your-broker-ip
 pip install -r optional_requirements.txt
 ```
 
+## Expected MQTT JSON Payload Format
+
+The MQTT sensor examples expect JSON messages in the following format:
+
+```json
+{
+    "System Info": {
+        "SSID": "vfExpress",
+        "RSSI": 195,
+        "Uptime": 1313471,
+        "Heap": 32996,
+        "SD Free": 3218866176
+    },
+    "VEML7700": {
+        "Ambient Light Level": 2612,
+        "White Level": 3762,
+        "Lux": 150.4512
+    },
+    "MMC5983": {
+        "X Field (Gauss)": -0.382629,
+        "Y Field (Gauss)": -0.799194,
+        "Z Field (Gauss)": -0.648071,
+        "Temperature (C)": 16
+    },
+    "MAX17048": {
+        "Voltage (V)": 3.90375,
+        "State Of Charge (%)": 66,
+        "Change Rate (%/hr)": -3.952
+    },
+    "TMP117": {
+        "Temperature (C)": 21.03906
+    },
+    "STHS34PF80": {
+        "Presence (cm^-1)": 3,
+        "Motion (LSB)": -28,
+        "Temperature (C)": 0
+    },
+    "BME68x": {
+        "Humidity": 38.06989,
+        "TemperatureC": 21.01744,
+        "Pressure": 100407.8,
+        "Gas Resistance": 91647.23,
+        "Sensor Status": 176
+    }
+}
+```
+
+**Note**: Not all fields are required. The examples will display "n/a" for missing sensor data.
+
 ### Command-Line Arguments
 
 All MQTT examples accept the following command-line arguments:

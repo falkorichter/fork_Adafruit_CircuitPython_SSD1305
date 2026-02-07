@@ -79,20 +79,6 @@ def main():
         print("=" * 50)
         print(f"Connecting to MQTT broker at {mqtt_sensor.broker_host}:{mqtt_sensor.broker_port}")
         print(f"Subscribing to topic: {mqtt_sensor.topic}")
-        print("\nExample JSON payload format:")
-        print("""{
-    "System Info": {"SSID": "MyWiFi", "RSSI": 198},
-    "VEML7700": {"Lux": 50.688},
-    "MAX17048": {"Voltage (V)": 4.21, "State Of Charge (%)": 108.89},
-    "TMP117": {"Temperature (C)": 22.375},
-    "STHS34PF80": {"Presence (cm^-1)": 1377, "Motion (LSB)": 24, "Temperature (C)": 0},
-    "BME68x": {
-        "Humidity": 36.19836,
-        "TemperatureC": 22.40555,
-        "Pressure": 99244.27,
-        "Gas Resistance": 29463.11
-    }
-}""")
         print("\n" + "=" * 50)
         print("Reading sensor data (Ctrl+C to exit)...")
         print()

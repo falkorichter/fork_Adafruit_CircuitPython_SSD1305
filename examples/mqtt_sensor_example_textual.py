@@ -99,6 +99,22 @@ class SensorDisplay(Static):
         lines.append(f"  TMP117:         {data['temp_c']} °C")
         lines.append("")
         
+        # STHS34PF80 presence/motion sensor
+        lines.append("[bold magenta]Presence/Motion Sensor[/bold magenta]")
+        lines.append(f"  Presence:       {data['presence_value']} cm^-1")
+        lines.append(f"  Motion:         {data['motion_value']} LSB")
+        lines.append(f"  Obj Temp:       {data['sths34_temperature']} °C")
+        
+        # Person detection status
+        person_status = data.get('person_detected', 'n/a')
+        if person_status == "n/a":
+            lines.append(f"  Person Status:  [dim]UNKNOWN - No data[/dim]")
+        elif person_status:
+            lines.append(f"  Person Status:  [bold red]*** DETECTED ***[/bold red]")
+        else:
+            lines.append(f"  Person Status:  [green]Not detected[/green]")
+        lines.append("")
+        
         self.update("\n".join(lines))
 
 
@@ -167,20 +183,6 @@ class ConfigDisplay(Static):
 [cyan]Topic:[/cyan] {self.mqtt_sensor.topic}
 [cyan]Check Interval:[/cyan] {self.mqtt_sensor.check_interval}s
 [cyan]Burn-in Time:[/cyan] {self.mqtt_sensor.burn_in_time}s
-
-[dim]Example JSON payload format:[/dim]
-{{
-    "System Info": {{"SSID": "MyWiFi", "RSSI": 198}},
-    "VEML7700": {{"Lux": 50.688}},
-    "MAX17048": {{"Voltage (V)": 4.21, "State Of Charge (%)": 108.89}},
-    "TMP117": {{"Temperature (C)": 22.375}},
-    "BME68x": {{
-        "Humidity": 36.19836,
-        "TemperatureC": 22.40555,
-        "Pressure": 99244.27,
-        "Gas Resistance": 29463.11
-    }}
-}}
 """
         self.update(config_text)
 

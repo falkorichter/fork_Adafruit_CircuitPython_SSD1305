@@ -51,20 +51,6 @@ def create_header_panel(mqtt_sensor):
 [cyan]Broker:[/cyan] {mqtt_sensor.broker_host}:{mqtt_sensor.broker_port}
 [cyan]Topic:[/cyan] {mqtt_sensor.topic}
 
-[dim]Example JSON payload format:[/dim]
-{{
-    "System Info": {{"SSID": "MyWiFi", "RSSI": 198}},
-    "VEML7700": {{"Lux": 50.688}},
-    "MAX17048": {{"Voltage (V)": 4.21, "State Of Charge (%)": 108.89}},
-    "TMP117": {{"Temperature (C)": 22.375}},
-    "BME68x": {{
-        "Humidity": 36.19836,
-        "TemperatureC": 22.40555,
-        "Pressure": 99244.27,
-        "Gas Resistance": 29463.11
-    }}
-}}
-
 [yellow]Press Ctrl+C to exit[/yellow]
 """
     return Panel(header_text, title="Configuration", border_style="blue")
@@ -117,6 +103,23 @@ def create_sensor_table_left(data):
     table.add_row("[bold magenta]Temperature Sensor[/bold magenta]", "")
     table.add_row("  TMP117", f"{data['temp_c']} °C")
     
+    table.add_row("", "")
+    
+    # STHS34PF80 presence/motion sensor
+    table.add_row("[bold magenta]Presence/Motion Sensor[/bold magenta]", "")
+    table.add_row("  Presence (STHS34PF80)", f"{data['presence_value']} cm^-1")
+    table.add_row("  Motion (STHS34PF80)", f"{data['motion_value']} LSB")
+    table.add_row("  Obj Temp (STHS34PF80)", f"{data['sths34_temperature']} °C")
+    
+    # Person detection status
+    person_status = data.get('person_detected', 'n/a')
+    if person_status == "n/a":
+        table.add_row("  Person Status", "[dim]UNKNOWN - No data[/dim]")
+    elif person_status:
+        table.add_row("  Person Status", "[bold red]*** DETECTED ***[/bold red]")
+    else:
+        table.add_row("  Person Status", "[green]Not detected[/green]")
+    
     return table
 
 
@@ -162,7 +165,7 @@ def create_layout(mqtt_sensor, data):
     
     # Split into header and body
     layout.split_column(
-        Layout(create_header_panel(mqtt_sensor), size=17, name="header"),
+        Layout(create_header_panel(mqtt_sensor), size=7, name="header"),
         Layout(name="body")
     )
     
