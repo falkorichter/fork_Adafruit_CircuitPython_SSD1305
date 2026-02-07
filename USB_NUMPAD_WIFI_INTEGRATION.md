@@ -130,6 +130,42 @@ You have a permanently installed USB numpad that needs to be integrated over WiF
 - May require proprietary software
 - Less flexibility for customization
 
+### Option 5: ESP32-S3 Wireless Dongle (USB-to-BLE/WiFi Bridge)
+
+**Description**: Use an ESP32-S3 as a compact wireless dongle that reads USB keyboard input via native USB-OTG and transmits over Bluetooth Low Energy (BLE) or WiFi. This approach was featured in the [Hackaday article "A Keyboard For Anything Without A Keyboard"](https://hackaday.com/2026/02/04/a-keyboard-for-anything-without-a-keyboard/).
+
+The ESP32-S3 acts as a USB host, receiving HID reports from the numpad, then forwards keypresses wirelessly. Open-source firmware like [ESP32S3-USB-Keyboard-To-BLE](https://github.com/KoStard/ESP32S3-USB-Keyboard-To-BLE) provides a ready-to-use solution.
+
+```
+┌─────────────┐     USB-C OTG    ┌─────────────────────┐   BLE/WiFi    ┌─────────────────────┐
+│  USB Numpad │─────────────────▶│   ESP32-S3 Dongle   │◀─────────────▶│   Main Server       │
+│             │                  │   - USB Host mode   │               │   (SSD1305 Display) │
+└─────────────┘                  │   - BLE HID or WiFi │               │   - BLE/WiFi client │
+                                 │   - Multi-device    │               │   - keyboard_plugin │
+                                 └─────────────────────┘               └─────────────────────┘
+```
+
+**Pros**:
+- Very compact form factor (dongle-sized)
+- Native USB-OTG hardware (no software emulation)
+- Low latency direct HID forwarding
+- Multi-device switching (up to 3 paired devices with hotkeys)
+- Open-source firmware available
+- Low power consumption (~20-50mA)
+- Fast boot (~1 second)
+- Works with any BLE-compatible device (Windows, macOS, Linux, iOS, Android)
+
+**Cons**:
+- ESP32-S3 USB-C port typically doesn't output 5V (requires powered hub or external power)
+- Limited USB host channels may not support complex multi-interface devices
+- BLE range limited (~10m typical)
+- For WiFi mode, additional firmware customization may be needed
+
+**Key Resources**:
+- [ESP32S3-USB-Keyboard-To-BLE (GitHub)](https://github.com/KoStard/ESP32S3-USB-Keyboard-To-BLE) - Ready-to-use firmware
+- [Hackaday: Wired To Wireless: ESP32 Gives Your USB Keyboard Bluetooth](https://hackaday.com/2026/01/23/wired-to-wireless-esp32-gives-your-usb-keyboard-bluetooth/)
+- [Adafruit USB Host to BLE Keyboard Adapter Guide](https://learn.adafruit.com/esp32-s3-usb-to-ble-keyboard-adapter/overview)
+
 ---
 
 ## Hardware Options
@@ -178,6 +214,27 @@ You have a permanently installed USB numpad that needs to be integrated over WiF
 | Silex SX-DS-4000U2 | 2-port USB Device Server | ~$150 | [Silex](https://www.silextechnology.com/connectivity-solutions/device-connectivity/sx-ds-4000u2) |
 | Digi AnywhereUSB | Industrial USB Hub | ~$200+ | [Digi](https://www.digi.com/products/networking/infrastructure-management/usb-connectivity/anywhereusb) |
 | IOGear GUWIP204 | 4-port USB Server | ~$80 | Various retailers |
+
+### Recommended Hardware for Option 5 (ESP32-S3 Wireless Dongle)
+
+| Component | Product | Price | Link |
+|-----------|---------|-------|------|
+| MCU Board | ESP32-S3-DevKitC-1 | ~$10 | [Espressif](https://www.espressif.com/en/products/devkits/esp32-s3-devkitc-1) |
+| MCU Board (Alt) | ESP32-S3-USB-OTG Board | ~$20 | [Espressif](https://www.espressif.com/en/products/devkits/esp32-s3-usb-otg) |
+| USB Hub | Powered USB Hub | ~$10-20 | Required if using standard DevKit |
+| Power | USB-C cable | ~$5 | Included with devkit |
+
+**Notes on Power**:
+- Most ESP32-S3 boards do NOT output 5V on the USB-C port
+- Use the **ESP32-S3-USB-OTG** board which has a dedicated USB-A host port with proper 5V output
+- Alternatively, use a **powered USB hub** between the ESP32-S3 and keyboard
+
+**Datasheets**:
+- [ESP32-S3 Datasheet](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_en.pdf)
+- [ESP32-S3-USB-OTG User Guide](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-usb-otg/user_guide.html)
+
+**Firmware**:
+- [ESP32S3-USB-Keyboard-To-BLE](https://github.com/KoStard/ESP32S3-USB-Keyboard-To-BLE) - Open source, ready to use
 
 ---
 
@@ -646,18 +703,19 @@ sudo systemctl start numpad-wifi.service
 
 ## Comparison Matrix
 
-| Feature | Option 1: Pi Zero W | Option 2: ESP32-S3 | Option 3: CH559+ESP | Option 4: Commercial |
-|---------|--------------------|--------------------|---------------------|---------------------|
-| **Cost** | ~$35-40 | ~$15-20 | ~$15-20 | ~$80-200 |
-| **Setup Difficulty** | Easy | Medium | Hard | Easy |
-| **Power Consumption** | ~120mA idle | ~20-50mA | ~30-50mA | ~100-200mA |
-| **Boot Time** | ~30s | ~1s | ~1s | ~10-30s |
-| **USB Compatibility** | Excellent | Good | Excellent | Excellent |
-| **WiFi Stability** | Excellent | Excellent | Good | Excellent |
-| **Development Time** | Low | Medium | High | Very Low |
-| **Customizability** | High | High | Medium | Low |
-| **Form Factor** | Medium | Small | Medium | Large |
-| **Maintenance** | Low | Low | Medium | Very Low |
+| Feature | Option 1: Pi Zero W | Option 2: ESP32-S3 | Option 3: CH559+ESP | Option 4: Commercial | Option 5: ESP32-S3 Dongle |
+|---------|--------------------|--------------------|---------------------|---------------------|---------------------------|
+| **Cost** | ~$35-40 | ~$15-20 | ~$15-20 | ~$80-200 | ~$10-25 |
+| **Setup Difficulty** | Easy | Medium | Hard | Easy | Easy (pre-built firmware) |
+| **Power Consumption** | ~120mA idle | ~20-50mA | ~30-50mA | ~100-200mA | ~20-50mA |
+| **Boot Time** | ~30s | ~1s | ~1s | ~10-30s | ~1s |
+| **USB Compatibility** | Excellent | Good | Excellent | Excellent | Good (HID only) |
+| **Wireless Type** | WiFi | WiFi | WiFi | WiFi | BLE or WiFi |
+| **Development Time** | Low | Medium | High | Very Low | Very Low |
+| **Customizability** | High | High | Medium | Low | Medium |
+| **Form Factor** | Medium | Small | Medium | Large | Very Small (dongle) |
+| **Maintenance** | Low | Low | Medium | Very Low | Low |
+| **Multi-Device** | No | No | No | No | Yes (3 devices) |
 
 ### Recommendation
 
@@ -673,6 +731,13 @@ sudo systemctl start numpad-wifi.service
 - Small form factor required
 - Fast boot time needed
 - Comfortable with embedded development
+
+**For plug-and-play BLE**: **Option 5 (ESP32-S3 Wireless Dongle)** is ideal if:
+- You want the smallest form factor (dongle-sized)
+- BLE connectivity is preferred over WiFi
+- Multi-device switching is needed (pair with up to 3 devices)
+- Ready-to-use firmware with minimal setup
+- You need to connect to phones, tablets, or smart TVs
 
 **For enterprise**: **Option 4 (Commercial Device Server)** if:
 - Reliability is paramount
@@ -696,6 +761,13 @@ sudo systemctl start numpad-wifi.service
 - [ESP32-S3 USB Host](https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-reference/peripherals/usb_host.html)
 - [ESP32-S3 Datasheet](https://www.espressif.com/sites/default/files/documentation/esp32-s3_datasheet_en.pdf)
 
+### ESP32-S3 Wireless Dongle Resources
+- [Hackaday: A Keyboard For Anything Without A Keyboard](https://hackaday.com/2026/02/04/a-keyboard-for-anything-without-a-keyboard/) - Original article on ESP32 wireless dongle approach
+- [Hackaday: Wired To Wireless: ESP32 Gives Your USB Keyboard Bluetooth](https://hackaday.com/2026/01/23/wired-to-wireless-esp32-gives-your-usb-keyboard-bluetooth/)
+- [ESP32S3-USB-Keyboard-To-BLE (GitHub)](https://github.com/KoStard/ESP32S3-USB-Keyboard-To-BLE) - Open source firmware
+- [Adafruit USB Host to BLE Keyboard Adapter Guide](https://learn.adafruit.com/esp32-s3-usb-to-ble-keyboard-adapter/overview)
+- [ESP32-S3-USB-OTG Development Board](https://docs.espressif.com/projects/esp-dev-kits/en/latest/esp32s3/esp32-s3-usb-otg/user_guide.html)
+
 ### evdev Library
 - [python-evdev Documentation](https://python-evdev.readthedocs.io/)
 - [Linux Input Subsystem](https://www.kernel.org/doc/html/latest/input/input.html)
@@ -709,5 +781,7 @@ sudo systemctl start numpad-wifi.service
 ## Conclusion
 
 This guide provides multiple architecture options for integrating a USB numpad over WiFi. The recommended approach using a Raspberry Pi Zero W offers the best balance of ease of implementation, reliability, and compatibility with the existing SSD1305 display simulator infrastructure.
+
+For a compact dongle-style solution, Option 5 (ESP32-S3 Wireless Dongle) provides excellent plug-and-play BLE functionality with ready-to-use open-source firmware.
 
 The provided implementation example can be directly used with the existing `ssd1305_web_simulator.py` WebSocket server, requiring minimal changes to the existing codebase.
