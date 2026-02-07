@@ -106,8 +106,8 @@ class SensorDisplay(Static):
         lines.append(f"  Obj Temp:       {data['sths34_temperature']} °C")
         
         # Person detection status
-        person_status = data.get('person_detected', 'n/a')
-        if person_status == "n/a":
+        person_status = data.get('person_detected')
+        if person_status is None or person_status == 'n/a':
             lines.append(f"  Person Status:  [dim]UNKNOWN - No data[/dim]")
         elif person_status:
             lines.append(f"  Person Status:  [bold red]*** DETECTED ***[/bold red]")

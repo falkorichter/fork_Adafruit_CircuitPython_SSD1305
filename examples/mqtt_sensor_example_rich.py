@@ -112,8 +112,8 @@ def create_sensor_table_left(data):
     table.add_row("  Obj Temp (STHS34PF80)", f"{data['sths34_temperature']} °C")
     
     # Person detection status
-    person_status = data.get('person_detected', 'n/a')
-    if person_status == "n/a":
+    person_status = data.get('person_detected')
+    if person_status is None or person_status == 'n/a':
         table.add_row("  Person Status", "[dim]UNKNOWN - No data[/dim]")
     elif person_status:
         table.add_row("  Person Status", "[bold red]*** DETECTED ***[/bold red]")
