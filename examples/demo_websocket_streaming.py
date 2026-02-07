@@ -174,19 +174,17 @@ class WebSocketServer:
         self.clients = set()
         self.streamer = TerminalStreamer()
         self.streamer.register_callback(self._broadcast_to_clients)
+        self.loop = None  # Will be set when server starts
     
     def _broadcast_to_clients(self, text):
         """Broadcast text to all WebSocket clients"""
-        if not self.clients:
+        if not self.clients or not self.loop:
             return
         
         message = json.dumps({"type": "output", "data": text})
         
-        try:
-            loop = asyncio.get_event_loop()
-            asyncio.run_coroutine_threadsafe(self._async_broadcast(message), loop)
-        except RuntimeError:
-            pass
+        # Schedule the coroutine in the event loop from another thread
+        asyncio.run_coroutine_threadsafe(self._async_broadcast(message), self.loop)
     
     async def _async_broadcast(self, message):
         """Async broadcast to all clients"""
@@ -223,6 +221,9 @@ class WebSocketServer:
     
     async def start(self):
         """Start the WebSocket server"""
+        # Store the event loop for cross-thread communication
+        self.loop = asyncio.get_running_loop()
+        
         async with websockets.serve(self.handler, self.host, self.port):
             print(f"\n{'=' * 60}")
             print(f"WebSocket Demo Server Started")

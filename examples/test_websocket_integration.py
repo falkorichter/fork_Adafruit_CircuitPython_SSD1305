@@ -123,6 +123,8 @@ async def test_websocket_client_connection():
     
     # Start server in background
     async def run_server():
+        # Set the loop for the server so broadcasts work
+        server.loop = asyncio.get_running_loop()
         async with websockets.serve(server.handler, server.host, server.port):
             await asyncio.sleep(3)  # Run for 3 seconds
     

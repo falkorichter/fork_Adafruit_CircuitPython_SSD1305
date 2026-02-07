@@ -54,6 +54,7 @@ class WebSocketTerminalServer:
         self.streamer = TerminalStreamer()
         self.streamer.register_callback(self._broadcast_to_clients)
         self._broadcast_lock = asyncio.Lock()
+        self.loop = None  # Will be set when server starts
     
     def _broadcast_to_clients(self, text: str) -> None:
         """
@@ -62,7 +63,7 @@ class WebSocketTerminalServer:
         
         :param text: Text to broadcast
         """
-        if not self.clients:
+        if not self.clients or not self.loop:
             return
         
         # Create a message with the text
@@ -71,14 +72,8 @@ class WebSocketTerminalServer:
             "data": text
         })
         
-        # Schedule broadcast in the event loop
-        # We need to handle this carefully since we might be called from a different thread
-        try:
-            loop = asyncio.get_event_loop()
-            asyncio.run_coroutine_threadsafe(self._async_broadcast(message), loop)
-        except RuntimeError:
-            # No event loop in current thread, this is expected
-            pass
+        # Schedule broadcast in the event loop from another thread
+        asyncio.run_coroutine_threadsafe(self._async_broadcast(message), self.loop)
     
     async def _async_broadcast(self, message: str) -> None:
         """
@@ -150,6 +145,9 @@ class WebSocketTerminalServer:
     
     async def start_server(self) -> None:
         """Start the WebSocket server"""
+        # Store the event loop for cross-thread communication
+        self.loop = asyncio.get_running_loop()
+        
         async with websockets.serve(self.handler, self.host, self.port):
             print(f"WebSocket server started on ws://{self.host}:{self.port}")
             print(f"Open the web UI in your browser to view the terminal output")
