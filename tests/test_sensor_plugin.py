@@ -730,12 +730,92 @@ class TestMQTTPlugin(unittest.TestCase):
             plugin.sensor_instance = self.mock_client
             plugin.available = True
             plugin.message_received = False
-            
+
             data = plugin._read_sensor_data()
             # All values should be n/a
             self.assertEqual(data["temperature"], "n/a")
             self.assertEqual(data["light"], "n/a")
             self.assertEqual(data["temp_c"], "n/a")
+
+    def test_parse_sths34pf80_data(self):
+        """Test parsing STHS34PF80 data from MQTT message"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+            # Test data matching the issue example
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 1377,
+                    "Motion (LSB)": 24,
+                    "Temperature (C)": 0,
+                }
+            }
+
+            data = plugin._read_sensor_data()
+            self.assertEqual(data["presence_value"], 1377)
+            self.assertEqual(data["motion_value"], 24)
+            self.assertEqual(data["sths34_temperature"], 0)
+            # Verify person_detected is calculated correctly
+            # With presence=1377 (>=1000) and motion=24 (>0), person should be detected
+            self.assertTrue(data["person_detected"])
+
+    def test_sths34pf80_person_detection(self):
+        """Test STHS34PF80 person detection logic in MQTT plugin"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+            
+            # Test 1: Person detected via high presence value
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 1500,
+                    "Motion (LSB)": 0,
+                    "Temperature (C)": 0,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertTrue(data["person_detected"])
+            
+            # Test 2: Person detected via motion
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 500,
+                    "Motion (LSB)": 10,
+                    "Temperature (C)": 0,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertTrue(data["person_detected"])
+            
+            # Test 3: No person detected (low values)
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 500,
+                    "Motion (LSB)": 0,
+                    "Temperature (C)": 0,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertFalse(data["person_detected"])
+            
+            # Test 4: Edge case - exactly at threshold
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 1000,
+                    "Motion (LSB)": 0,
+                    "Temperature (C)": 0,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertTrue(data["person_detected"])
 
     def test_air_quality_calculation(self):
         """Test BME68x air quality calculation similar to BME680Plugin"""
@@ -819,6 +899,133 @@ class TestMQTTPlugin(unittest.TestCase):
                 self.assertEqual(data["temperature"], "n/a")
                 self.assertEqual(data["humidity"], "n/a")
                 self.assertFalse(plugin.available)
+
+
+class TestSTHS34PF80Plugin(unittest.TestCase):
+    """Test STHS34PF80 sensor plugin"""
+
+    def setUp(self):
+        """Set up mock sensor"""
+        self.mock_sensor = MagicMock()
+        self.mock_sensor.presence_value = 1500
+        self.mock_sensor.motion_value = 50
+        self.mock_sensor.ambient_temperature = 22.5
+
+        self.sths_module = MagicMock()
+        self.sths_module.STHS34PF80.return_value = self.mock_sensor
+
+        self.board_module = MagicMock()
+
+    def test_read_presence_motion(self):
+        """Test reading presence and motion from STHS34PF80"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_sths34pf80": self.sths_module, "board": self.board_module},
+        ):
+            from sensor_plugins import STHS34PF80Plugin
+
+            plugin = STHS34PF80Plugin()
+            data = plugin.read()
+            self.assertEqual(data["presence_value"], 1500)
+            self.assertEqual(data["motion_value"], 50)
+            self.assertEqual(data["temperature"], 22.5)
+            self.assertTrue(data["person_present"])
+
+    def test_person_not_present(self):
+        """Test when presence value is below threshold"""
+        self.mock_sensor.presence_value = 500  # Below default threshold of 1000
+
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_sths34pf80": self.sths_module, "board": self.board_module},
+        ):
+            from sensor_plugins import STHS34PF80Plugin
+
+            plugin = STHS34PF80Plugin()
+            data = plugin.read()
+            self.assertEqual(data["presence_value"], 500)
+            self.assertFalse(data["person_present"])
+
+    def test_custom_threshold(self):
+        """Test custom presence threshold"""
+        self.mock_sensor.presence_value = 1200
+
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_sths34pf80": self.sths_module, "board": self.board_module},
+        ):
+            from sensor_plugins import STHS34PF80Plugin
+
+            # With threshold 1500, should not detect presence
+            plugin = STHS34PF80Plugin(presence_threshold=1500)
+            data = plugin.read()
+            self.assertFalse(data["person_present"])
+
+            # With threshold 1000, should detect presence
+            plugin2 = STHS34PF80Plugin(presence_threshold=1000)
+            data2 = plugin2.read()
+            self.assertTrue(data2["person_present"])
+
+            # With threshold equal to value (1200), should detect presence (>=)
+            plugin3 = STHS34PF80Plugin(presence_threshold=1200)
+            data3 = plugin3.read()
+            self.assertTrue(data3["person_present"])
+
+    def test_unavailable_data(self):
+        """Test STHS34PF80 unavailable data format"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_sths34pf80": self.sths_module, "board": self.board_module},
+        ):
+            from sensor_plugins import STHS34PF80Plugin
+
+            plugin = STHS34PF80Plugin()
+            data = plugin._get_unavailable_data()
+            self.assertEqual(data["presence_value"], "n/a")
+            self.assertEqual(data["motion_value"], "n/a")
+            self.assertEqual(data["temperature"], "n/a")
+            self.assertEqual(data["person_present"], "n/a")
+
+    def test_format_display_present(self):
+        """Test display formatting when person is present"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_sths34pf80": self.sths_module, "board": self.board_module},
+        ):
+            from sensor_plugins import STHS34PF80Plugin
+
+            plugin = STHS34PF80Plugin()
+            data = {"person_present": True, "presence_value": 1500}
+            display = plugin.format_display(data)
+            self.assertIn("PRESENT", display)
+            self.assertIn("1500", display)
+
+    def test_format_display_absent(self):
+        """Test display formatting when person is absent"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_sths34pf80": self.sths_module, "board": self.board_module},
+        ):
+            from sensor_plugins import STHS34PF80Plugin
+
+            plugin = STHS34PF80Plugin()
+            data = {"person_present": False, "presence_value": 500}
+            display = plugin.format_display(data)
+            self.assertIn("ABSENT", display)
+            self.assertIn("500", display)
+
+    def test_format_display_unavailable(self):
+        """Test display formatting when sensor is unavailable"""
+        with patch.dict(
+            "sys.modules",
+            {"adafruit_sths34pf80": self.sths_module, "board": self.board_module},
+        ):
+            from sensor_plugins import STHS34PF80Plugin
+
+            plugin = STHS34PF80Plugin()
+            data = plugin._get_unavailable_data()
+            display = plugin.format_display(data)
+            self.assertIn("n/a", display)
 
 
 if __name__ == "__main__":

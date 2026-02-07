@@ -15,6 +15,7 @@ parses JSON sensor data including:
 - VEML7700 light sensor
 - TMP117 temperature sensor
 - MAX17048 battery monitor
+- STHS34PF80 IR presence/motion sensor
 - System information (WiFi SSID, RSSI)
 
 The sensor is hot-pluggable - it will automatically detect when the
@@ -84,6 +85,7 @@ def main():
     "VEML7700": {"Lux": 50.688},
     "MAX17048": {"Voltage (V)": 4.21, "State Of Charge (%)": 108.89},
     "TMP117": {"Temperature (C)": 22.375},
+    "STHS34PF80": {"Presence (cm^-1)": 1377, "Motion (LSB)": 24, "Temperature (C)": 0},
     "BME68x": {
         "Humidity": 36.19836,
         "TemperatureC": 22.40555,
@@ -129,6 +131,21 @@ def main():
             # Other sensors
             print(f"\nLight Level:    {data['light']} lux (VEML7700)")
             print(f"Temperature:    {data['temp_c']} °C (TMP117)")
+            
+            # STHS34PF80 presence/motion sensor
+            print(f"\nPresence:       {data['presence_value']} cm^-1 (STHS34PF80)")
+            print(f"Motion:         {data['motion_value']} LSB (STHS34PF80)")
+            print(f"Obj Temp:       {data['sths34_temperature']} °C (STHS34PF80)")
+            
+            # Display person detection status (condensed value)
+            person_status = data.get('person_detected', 'n/a')
+            if person_status == "n/a":
+                print(f"Person Status:  UNKNOWN - No STHS34PF80 data available")
+            elif person_status:
+                print(f"Person Status:  *** PERSON DETECTED *** (Presence >= 1000 OR Motion > 0)")
+            else:
+                print(f"Person Status:  No person detected (Presence < 1000 AND Motion = 0)")
+            
             print(f"\nBattery Voltage: {data['voltage']} V")
             print(f"Battery SOC:     {data['soc']} %")
             print(f"\nWiFi SSID:      {data['ssid']}")

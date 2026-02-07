@@ -2,6 +2,9 @@
 #
 # SPDX-License-Identifier: Unlicense
 
+# PIL/Pillow for image operations in examples (web simulator, pillow demo, stats)
+Pillow
+
 # Optional dependencies for keyboard activity monitoring in burn-in prevention:
 pynput  # Cross-platform keyboard monitoring (requires X11/display server)
 evdev  # Linux-specific keyboard monitoring (works in headless environments)
@@ -12,3 +15,7 @@ paho-mqtt  # MQTT client library for IoT sensor data streaming
 # Optional dependencies for enhanced terminal UI (MQTT examples):
 rich  # Rich text and beautiful formatting for terminal displays
 textual  # Modern Python framework for building sophisticated terminal UIs
+
+# Optional dependency for STHS34PF80 IR presence/motion sensor:
+adafruit-circuitpython-sths34pf80  # STHS34PF80 IR presence/motion sensor library
+
