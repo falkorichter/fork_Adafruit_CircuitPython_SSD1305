@@ -310,11 +310,10 @@ class MQTTPlugin(SensorPlugin):
                 
                 # Update moving average baseline
                 self.magnitude_history.append(magnitude)
-                if len(self.magnitude_history) > 0:
-                    self.mag_baseline = sum(self.magnitude_history) / len(
-                        self.magnitude_history
-                    )
-                    result["mag_baseline"] = self.mag_baseline
+                self.mag_baseline = sum(self.magnitude_history) / len(
+                    self.magnitude_history
+                )
+                result["mag_baseline"] = self.mag_baseline
                 
                 # Detect magnet based on deviation from baseline
                 if self.mag_baseline is not None:
