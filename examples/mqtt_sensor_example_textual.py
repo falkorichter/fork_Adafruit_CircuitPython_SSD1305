@@ -43,7 +43,7 @@ except ImportError:
 
 
 class SensorDisplay(Static):
-    """Widget to display sensor information"""
+    """Widget to display sensor information in left column"""
     
     mqtt_sensor = None
     
@@ -60,13 +60,13 @@ class SensorDisplay(Static):
         data = self.mqtt_sensor.read()
         timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
         
-        # Build display text
+        # Build display text - Left column: Environmental sensors
         lines = []
         lines.append(f"[bold cyan]Timestamp:[/bold cyan] {timestamp}")
         lines.append("")
         
         # BME68x environmental data
-        lines.append("[bold magenta]BME68x Environmental Sensor[/bold magenta]")
+        lines.append("[bold magenta]BME68x Environmental[/bold magenta]")
         lines.append(f"  Temperature:    {data['temperature']} °C")
         lines.append(f"  Humidity:       {data['humidity']} %")
         lines.append(f"  Pressure:       {data['pressure']} Pa")
@@ -89,34 +89,64 @@ class SensorDisplay(Static):
         
         lines.append("")
         
-        # Other sensors
+        # Light sensor
         lines.append("[bold magenta]Light Sensor[/bold magenta]")
         lines.append(f"  VEML7700:       {data['light']} lux")
         lines.append("")
         
+        # Temperature sensor
         lines.append("[bold magenta]Temperature Sensor[/bold magenta]")
         lines.append(f"  TMP117:         {data['temp_c']} °C")
+        
+        self.update("\n".join(lines))
+
+
+class SystemDisplay(Static):
+    """Widget to display system information in right column"""
+    
+    mqtt_sensor = None
+    
+    def on_mount(self) -> None:
+        """Set up periodic updates when widget is mounted"""
+        self.set_interval(2, self.update_system_data)
+        self.update_system_data()
+    
+    def update_system_data(self) -> None:
+        """Read system data and update display"""
+        if self.mqtt_sensor is None:
+            return
+        
+        data = self.mqtt_sensor.read()
+        
+        # Build display text - Right column: System sensors
+        lines = []
+        lines.append("[bold cyan]System Information[/bold cyan]")
         lines.append("")
         
+        # Battery monitor
         lines.append("[bold magenta]Battery Monitor[/bold magenta]")
         lines.append(f"  Voltage:        {data['voltage']} V")
         lines.append(f"  State of Charge: {data['soc']} %")
         lines.append("")
         
+        # WiFi information
         lines.append("[bold magenta]WiFi Information[/bold magenta]")
         lines.append(f"  SSID:           {data['ssid']}")
         lines.append(f"  RSSI:           {data['rssi']}")
         lines.append("")
         
-        # Display text and status
+        # Display text
         display_text = self.mqtt_sensor.format_display(data)
-        lines.append(f"[bold cyan]Display Text:[/bold cyan] {display_text}")
+        lines.append("[bold magenta]Display Output[/bold magenta]")
+        lines.append(f"  {display_text}")
         lines.append("")
         
+        # Connection status
         if self.mqtt_sensor.available:
             lines.append("[bold green]Status: Connected ✓[/bold green]")
         else:
-            lines.append("[bold red]Status: Disconnected (waiting for broker...)[/bold red]")
+            lines.append("[bold red]Status: Disconnected[/bold red]")
+            lines.append("[dim](waiting for broker...)[/dim]")
         
         self.update("\n".join(lines))
 
@@ -169,9 +199,20 @@ class MQTTSensorApp(App):
         margin-bottom: 1;
     }
     
+    #data_grid {
+        layout: grid;
+        grid-size: 2 1;
+        grid-gutter: 1;
+        height: 1fr;
+    }
+    
     #sensors {
-        height: auto;
         border: solid green;
+        padding: 1;
+    }
+    
+    #system {
+        border: solid cyan;
         padding: 1;
     }
     """
@@ -187,10 +228,10 @@ class MQTTSensorApp(App):
     def compose(self) -> ComposeResult:
         """Create child widgets for the app"""
         yield Header()
-        yield Container(
-            ConfigDisplay(self.mqtt_sensor, id="config"),
-            SensorDisplay(id="sensors"),
-        )
+        yield ConfigDisplay(self.mqtt_sensor, id="config")
+        with Container(id="data_grid"):
+            yield SensorDisplay(id="sensors")
+            yield SystemDisplay(id="system")
         yield Footer()
     
     def on_mount(self) -> None:
@@ -198,9 +239,12 @@ class MQTTSensorApp(App):
         self.title = "MQTT Sensor Monitor"
         self.sub_title = f"Monitoring {self.mqtt_sensor.topic}"
         
-        # Pass mqtt_sensor to SensorDisplay
+        # Pass mqtt_sensor to displays
         sensor_display = self.query_one(SensorDisplay)
         sensor_display.mqtt_sensor = self.mqtt_sensor
+        
+        system_display = self.query_one(SystemDisplay)
+        system_display.mqtt_sensor = self.mqtt_sensor
 
 
 def main():
