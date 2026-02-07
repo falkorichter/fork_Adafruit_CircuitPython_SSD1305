@@ -68,21 +68,31 @@ class WebSocketTerminalServer:
         
         :param text: Text to broadcast
         """
+        def debug_print(msg):
+            """Print debug message bypassing capture"""
+            if self.debug:
+                # Write to original stderr to bypass capture
+                if self.streamer._original_stderr:
+                    self.streamer._original_stderr.write(msg + '\n')
+                    self.streamer._original_stderr.flush()
+                else:
+                    print(msg, file=sys.stderr)
+        
         if not self.clients or not self.loop:
-            if self.debug and not self.clients:
-                print(f"[DEBUG] No clients connected, skipping broadcast")
-            elif self.debug and not self.loop:
-                print(f"[DEBUG] Event loop not set, skipping broadcast")
+            if not self.clients:
+                debug_print("[DEBUG] No clients connected, skipping broadcast")
+            elif not self.loop:
+                debug_print("[DEBUG] Event loop not set, skipping broadcast")
             return
         
         self._broadcast_count += 1
         if self.debug:
-            print(
+            debug_print(
                 f"[DEBUG] Broadcasting #{self._broadcast_count}: "
                 f"{len(text)} chars to {len(self.clients)} client(s)"
             )
             if len(text) < 100:
-                print(f"[DEBUG] Content: {repr(text)}")
+                debug_print(f"[DEBUG] Content: {repr(text)}")
         
         # Create a message with the text
         message = json.dumps({
@@ -181,29 +191,43 @@ class WebSocketTerminalServer:
         :param args: Positional arguments to pass to the function
         :param kwargs: Keyword arguments to pass to the function
         """
+        def debug_print(msg):
+            """Print debug message bypassing capture by writing to original stderr"""
+            if self.debug:
+                # Write to original stderr if capture is active, otherwise use sys.stderr
+                if self.streamer._original_stderr:
+                    self.streamer._original_stderr.write(msg + '\n')
+                    self.streamer._original_stderr.flush()
+                else:
+                    print(msg, file=sys.stderr)
+        
         def run_with_capture():
             """Run the script with terminal capture"""
-            print(
+            debug_print(
                 f"[DEBUG] Starting sensor script: "
                 f"{script_func.__module__}.{script_func.__name__}"
             )
-            print(f"[DEBUG] Capture enabled: {self.streamer is not None}")
+            debug_print(f"[DEBUG] Capture enabled: {self.streamer is not None}")
             
             self.streamer.start_capture()
             try:
-                print("[DEBUG] Running sensor script...")
+                debug_print("[DEBUG] Running sensor script...")
                 script_func(*args, **kwargs)
             except Exception as e:
-                print(f"[ERROR] Sensor script failed: {e}")
-                traceback.print_exc()
+                debug_print(f"[ERROR] Sensor script failed: {e}")
+                # For traceback, write to original stderr
+                if self.streamer._original_stderr:
+                    traceback.print_exc(file=self.streamer._original_stderr)
+                else:
+                    traceback.print_exc()
             finally:
-                print("[DEBUG] Stopping capture...")
+                debug_print("[DEBUG] Stopping capture...")
                 self.streamer.stop_capture()
         
         # Run in a separate thread
         thread = threading.Thread(target=run_with_capture, daemon=True)
         thread.start()
-        print(f"[DEBUG] Sensor script thread started (daemon={thread.daemon})")
+        debug_print(f"[DEBUG] Sensor script thread started (daemon={thread.daemon})")
 
 
 async def main_async(args):
@@ -298,7 +322,7 @@ def main():
     
     # Enable debug mode if requested
     if args.debug:
-        print("[DEBUG] Debug mode enabled")
+        print("[DEBUG] Debug mode enabled", file=sys.stderr)
         os.environ['WEBSOCKET_DEBUG'] = '1'
     
     # Store MQTT args for the script to use
