@@ -127,6 +127,9 @@ class MQTTPlugin(SensorPlugin):
             "soc": "n/a",
             "ssid": "n/a",
             "rssi": "n/a",
+            "presence_value": "n/a",
+            "motion_value": "n/a",
+            "sths34_temperature": "n/a",
         }
 
         if not self.message_received or self.latest_message is None:
@@ -236,6 +239,16 @@ class MQTTPlugin(SensorPlugin):
             if "RSSI" in sys_data:
                 result["rssi"] = sys_data["RSSI"]
 
+        # Extract STHS34PF80 data
+        if "STHS34PF80" in self.latest_message:
+            sths_data = self.latest_message["STHS34PF80"]
+            if "Presence (cm^-1)" in sths_data:
+                result["presence_value"] = sths_data["Presence (cm^-1)"]
+            if "Motion (LSB)" in sths_data:
+                result["motion_value"] = sths_data["Motion (LSB)"]
+            if "Temperature (C)" in sths_data:
+                result["sths34_temperature"] = sths_data["Temperature (C)"]
+
         return result
 
     def _get_unavailable_data(self) -> Dict[str, Any]:
@@ -252,6 +265,9 @@ class MQTTPlugin(SensorPlugin):
             "soc": "n/a",
             "ssid": "n/a",
             "rssi": "n/a",
+            "presence_value": "n/a",
+            "motion_value": "n/a",
+            "sths34_temperature": "n/a",
         }
 
     def format_display(self, data: Dict[str, Any]) -> str:
