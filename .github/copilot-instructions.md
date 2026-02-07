@@ -3,10 +3,13 @@
 ## Project Overview
 This is an extended fork of Adafruit's CircuitPython SSD1305 OLED driver, transformed into a flexible IoT sensor dashboard platform with plugin architecture, web simulation, MQTT integration, and OLED burn-in prevention.
 
+**Tech stack:** Python 3.8+, ruff (linter/formatter), pytest (testing), REUSE (license compliance)
+
 **Core modules:**
-- `adafruit_ssd1305.py` - Low-level framebuffer driver (original Adafruit code)
-- `sensor_plugins/` - Hot-pluggable sensor plugin system (9 plugins)
+- `adafruit_ssd1305.py` - Low-level framebuffer driver (original Adafruit code, do not modify)
+- `sensor_plugins/` - Hot-pluggable sensor plugin system (10 plugins)
 - `display_timeout.py` - OLED burn-in prevention with keyboard activity detection
+- `terminal_streamer.py` - Callback-based terminal output capture and broadcast
 - `examples/` - Stats display, web simulator, MQTT examples
 
 ## Plugin System Architecture
@@ -34,7 +37,7 @@ class MyPlugin(SensorPlugin):
 - Graceful degradation: `read()` returns fallback data if hardware unavailable
 - Thread-safe: Use locks for shared state (see BME680Plugin cache)
 
-**Available plugins:** TMP117, BME680, VEML7700, STHS34PF80, CPULoad, MemoryUsage, IPAddress, Keyboard, MQTT
+**Available plugins:** TMP117, BME680, VEML7700, STHS34PF80, MMC5983, CPULoad, MemoryUsage, IPAddress, Keyboard, MQTT
 
 ## Development Workflows
 
@@ -42,6 +45,14 @@ class MyPlugin(SensorPlugin):
 ```bash
 pip install -r requirements.txt              # Core: Blinka, busdevice, framebuf
 pip install -r optional_requirements.txt     # Optional: PIL, paho-mqtt, websockets, pynput, evdev, rich, textual
+```
+
+**Lint and format:**
+```bash
+ruff check .                                  # Lint (rules configured in ruff.toml)
+ruff format --check .                         # Check formatting (line-length 100, LF endings)
+ruff check --fix .                            # Auto-fix lint issues
+ruff format .                                 # Auto-format code
 ```
 
 **Run tests:**
@@ -62,6 +73,17 @@ python examples/mqtt_sensor_example.py --broker localhost --port 1883  # MQTT ex
 
 ## Coding Conventions
 
+**Formatting (enforced by ruff):**
+- Target Python 3.8+ (`target-version = "py38"` in `ruff.toml`)
+- Line length: 100 characters
+- Line endings: LF
+- Pre-commit hooks run ruff format, ruff lint, and REUSE license checks
+
+**REUSE license compliance:**
+- All files must have SPDX license headers (checked by pre-commit and CI)
+- Use `# SPDX-FileCopyrightText:` and `# SPDX-License-Identifier:` comments
+- See existing files for examples of the required header format
+
 **Dependencies:**
 - Keep `requirements.txt` (core) and `optional_requirements.txt` (optional) up to date
 - Install only via requirements files, not direct pip commands in scripts
@@ -80,11 +102,19 @@ python examples/mqtt_sensor_example.py --broker localhost --port 1883  # MQTT ex
 - Plugins: Catch exceptions in `_initialize_hardware()`, set `self.available = False`
 - Missing dependencies: Show clear error messages with pip install instructions (see `examples/mqtt_sensor_example_rich.py:32-43`)
 
+## Boundaries
+
+**Do not modify:**
+- `adafruit_ssd1305.py` - Original Adafruit driver; upstream changes only
+- `.github/workflows/` - CI workflows managed separately
+- `LICENSES/` - License files managed by REUSE tool
+
 ## Key Files & Patterns
 
 **Plugin examples:**
 - `sensor_plugins/tmp117_plugin.py` - Simple temperature sensor
 - `sensor_plugins/bme680_plugin.py` - Complex with burn-in cache and background updates
+- `sensor_plugins/mmc5983_plugin.py` - Magnetometer with magnet detection via `sensor_plugins/magnet_detector.py`
 - `sensor_plugins/mqtt_plugin.py` - Virtual sensor reading from MQTT JSON messages
 
 **Display timeout:**
