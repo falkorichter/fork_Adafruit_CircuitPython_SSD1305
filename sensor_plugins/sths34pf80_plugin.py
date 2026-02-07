@@ -34,11 +34,12 @@ class STHS34PF80Plugin(SensorPlugin):
         presence_value = self.sensor_instance.presence_value
         motion_value = self.sensor_instance.motion_value
         temperature = self.sensor_instance.ambient_temperature
-        
+
         # Determine if person is likely present based on threshold
         # Higher presence_value indicates stronger presence detection
-        person_present = presence_value > self.presence_threshold
-        
+        # Values at or above threshold indicate presence
+        person_present = presence_value >= self.presence_threshold
+
         return {
             "presence_value": presence_value,
             "motion_value": motion_value,

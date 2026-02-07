@@ -909,6 +909,11 @@ class TestSTHS34PF80Plugin(unittest.TestCase):
             data2 = plugin2.read()
             self.assertTrue(data2["person_present"])
 
+            # With threshold equal to value (1200), should detect presence (>=)
+            plugin3 = STHS34PF80Plugin(presence_threshold=1200)
+            data3 = plugin3.read()
+            self.assertTrue(data3["person_present"])
+
     def test_unavailable_data(self):
         """Test STHS34PF80 unavailable data format"""
         with patch.dict(
