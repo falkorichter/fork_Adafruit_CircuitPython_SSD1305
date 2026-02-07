@@ -19,6 +19,9 @@ parses JSON sensor data including:
 
 The sensor is hot-pluggable - it will automatically detect when the
 MQTT broker becomes available or unavailable.
+
+The terminal output updates in place using ANSI escape codes, providing
+a clean interface that doesn't continuously scroll.
 """
 
 import sys
@@ -65,13 +68,24 @@ def main():
     print("Reading sensor data (Ctrl+C to exit)...")
     print()
     
+    # ANSI escape codes for terminal control
+    CLEAR_FROM_CURSOR = "\033[0J"  # Clear from cursor to end of screen
+    SAVE_CURSOR = "\033[s"  # Save cursor position
+    RESTORE_CURSOR = "\033[u"  # Restore cursor position
+    
+    # Save cursor position after the header
+    print(SAVE_CURSOR, end="", flush=True)
+    
     try:
         while True:
             # Read sensor data
             data = mqtt_sensor.read()
             
+            # Restore cursor to saved position and clear to end
+            print(RESTORE_CURSOR + CLEAR_FROM_CURSOR, end="", flush=True)
+            
             # Display the data
-            print(f"\nTimestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
             print("-" * 50)
             
             # BME68x environmental data - always show raw values
