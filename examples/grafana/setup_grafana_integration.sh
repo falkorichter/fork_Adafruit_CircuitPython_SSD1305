@@ -56,29 +56,29 @@ print_info "Starting Grafana integration setup..."
 
 print_info "Installing InfluxDB 2.x..."
 
+INFLUX_ALREADY_SETUP=false
+
 if command -v influxd &> /dev/null; then
     print_warn "InfluxDB is already installed. Skipping installation."
+    INFLUX_ALREADY_SETUP=true
 else
-    # Determine correct package for architecture
-    if [[ "$ARCH" == "aarch64" ]]; then
-        INFLUX_PKG="influxdb2-2.7.4-arm64.deb"
-    else
-        INFLUX_PKG="influxdb2-2.7.4-armhf.deb"
-    fi
+    print_info "Adding InfluxDB repository..."
     
-    print_info "Downloading InfluxDB package: $INFLUX_PKG"
-    print_info "This may take a few minutes depending on your internet connection..."
+    # Add InfluxDB GPG key and repository
+    wget -q https://repos.influxdata.com/influxdata-archive_compat.key -O /tmp/influxdata-archive_compat.key
+    echo '393e8779c89ac8d958f81f942f9ad7fb82a25e133faddaf92e15b16e6ac9ce4c /tmp/influxdata-archive_compat.key' | sha256sum -c && cat /tmp/influxdata-archive_compat.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null
     
-    # Download with progress bar (remove -q for visibility)
-    if ! wget --show-progress --progress=bar:force "https://dl.influxdata.com/influxdb/releases/$INFLUX_PKG" -O /tmp/influxdb.deb 2>&1; then
-        print_error "Failed to download InfluxDB package"
+    echo 'deb [signed-by=/etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg] https://repos.influxdata.com/debian stable main' | sudo tee /etc/apt/sources.list.d/influxdata.list
+    
+    print_info "Updating package list..."
+    sudo apt-get update -qq
+    
+    print_info "Installing InfluxDB (this may take a few minutes)..."
+    if ! sudo apt-get install -y influxdb2; then
+        print_error "Failed to install InfluxDB"
         print_error "Please check your internet connection and try again"
         exit 1
     fi
-    
-    print_info "Installing InfluxDB..."
-    sudo dpkg -i /tmp/influxdb.deb || true
-    sudo apt-get install -f -y  # Fix any dependency issues
     
     print_info "Enabling and starting InfluxDB service..."
     sudo systemctl enable influxdb
@@ -86,17 +86,106 @@ else
     
     # Wait for InfluxDB to start
     print_info "Waiting for InfluxDB to start..."
-    sleep 5
+    sleep 10
     
     print_info "InfluxDB installed successfully!"
-    print_info "Access InfluxDB UI at: http://localhost:8086"
-    print_warn "IMPORTANT: Complete InfluxDB setup in web UI:"
-    print_warn "  1. Open http://localhost:8086"
-    print_warn "  2. Create initial user and organization 'sensors'"
-    print_warn "  3. Create bucket 'sensor_data'"
-    print_warn "  4. Generate API token and save it"
-    echo ""
-    read -p "Press Enter after completing InfluxDB setup..."
+fi
+
+# =============================================================================
+# Step 1.5: Automated InfluxDB Setup (CLI-based, no manual intervention)
+# =============================================================================
+
+print_info "Configuring InfluxDB..."
+
+# Check if InfluxDB is already configured
+if influx ping &> /dev/null && influx auth list &> /dev/null 2>&1; then
+    print_warn "InfluxDB appears to be already configured"
+    print_info "Attempting to retrieve existing configuration..."
+    
+    # Try to get existing token from influx CLI config
+    if [ -f ~/.influxdbv2/configs ]; then
+        INFLUX_TOKEN=$(grep -m 1 "token = " ~/.influxdbv2/configs | cut -d'"' -f2)
+        if [ -n "$INFLUX_TOKEN" ]; then
+            print_info "Found existing InfluxDB token"
+        else
+            print_warn "Could not find token in config file"
+            echo ""
+            print_warn "Please enter your existing InfluxDB token:"
+            read -r INFLUX_TOKEN
+        fi
+    else
+        print_warn "No InfluxDB config found"
+        echo ""
+        print_warn "Please enter your existing InfluxDB token:"
+        read -r INFLUX_TOKEN
+    fi
+else
+    # Perform automated setup
+    print_info "Running automated InfluxDB setup..."
+    
+    # Generate a secure random password
+    INFLUX_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
+    
+    # Set up InfluxDB with CLI
+    print_info "Creating initial configuration..."
+    influx setup \
+        --username admin \
+        --password "$INFLUX_PASSWORD" \
+        --org sensors \
+        --bucket sensor_data \
+        --retention 0 \
+        --force \
+        --json > /tmp/influx_setup.json 2>&1
+    
+    if [ $? -eq 0 ]; then
+        print_info "InfluxDB setup completed successfully!"
+        
+        # Extract token from setup output
+        INFLUX_TOKEN=$(cat /tmp/influx_setup.json | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+        
+        if [ -z "$INFLUX_TOKEN" ]; then
+            # Try alternative extraction method
+            INFLUX_TOKEN=$(influx auth list --json 2>/dev/null | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4)
+        fi
+        
+        if [ -n "$INFLUX_TOKEN" ]; then
+            print_info "InfluxDB token generated successfully"
+            
+            # Save credentials to a file for reference
+            cat > ~/influxdb_credentials.txt << EOF
+InfluxDB Credentials
+====================
+URL: http://localhost:8086
+Username: admin
+Password: $INFLUX_PASSWORD
+Organization: sensors
+Bucket: sensor_data
+Token: $INFLUX_TOKEN
+
+IMPORTANT: Keep this file secure and delete it after noting the credentials!
+EOF
+            chmod 600 ~/influxdb_credentials.txt
+            
+            print_warn "Credentials saved to: ~/influxdb_credentials.txt"
+            print_warn "Please store these credentials securely and delete the file!"
+        else
+            print_error "Failed to extract InfluxDB token"
+            print_error "Please set up InfluxDB manually and run this script again"
+            exit 1
+        fi
+        
+        # Clean up setup output
+        rm -f /tmp/influx_setup.json
+    else
+        print_error "InfluxDB setup failed"
+        cat /tmp/influx_setup.json
+        exit 1
+    fi
+fi
+
+if [ -z "$INFLUX_TOKEN" ]; then
+    print_error "No InfluxDB token available"
+    exit 1
 fi
 
 # =============================================================================
@@ -108,26 +197,14 @@ print_info "Installing Telegraf..."
 if command -v telegraf &> /dev/null; then
     print_warn "Telegraf is already installed. Skipping installation."
 else
-    # Determine correct package for architecture
-    if [[ "$ARCH" == "aarch64" ]]; then
-        TELEGRAF_PKG="telegraf_1.29.0-1_arm64.deb"
-    else
-        TELEGRAF_PKG="telegraf_1.29.0-1_armhf.deb"
-    fi
+    # Repository should already be added from InfluxDB installation
+    print_info "Installing Telegraf from repository (this may take a few minutes)..."
     
-    print_info "Downloading Telegraf package: $TELEGRAF_PKG"
-    print_info "This may take a few minutes depending on your internet connection..."
-    
-    # Download with progress bar (remove -q for visibility)
-    if ! wget --show-progress --progress=bar:force "https://dl.influxdata.com/telegraf/releases/$TELEGRAF_PKG" -O /tmp/telegraf.deb 2>&1; then
-        print_error "Failed to download Telegraf package"
+    if ! sudo apt-get install -y telegraf; then
+        print_error "Failed to install Telegraf"
         print_error "Please check your internet connection and try again"
         exit 1
     fi
-    
-    print_info "Installing Telegraf..."
-    sudo dpkg -i /tmp/telegraf.deb || true
-    sudo apt-get install -f -y  # Fix any dependency issues
     
     print_info "Telegraf installed successfully!"
 fi
@@ -137,16 +214,6 @@ fi
 # =============================================================================
 
 print_info "Configuring Telegraf..."
-
-# Ask for InfluxDB token
-echo ""
-print_warn "Enter your InfluxDB API token (from step 1):"
-read -r INFLUX_TOKEN
-
-if [[ -z "$INFLUX_TOKEN" ]]; then
-    print_error "InfluxDB token cannot be empty!"
-    exit 1
-fi
 
 # Backup existing config if it exists
 if [[ -f /etc/telegraf/telegraf.conf ]]; then
@@ -242,10 +309,16 @@ echo "       - Settings → Data Sources → Add InfluxDB"
 echo "       - Query Language: Flux"
 echo "       - URL: http://localhost:8086"
 echo "       - Organization: sensors"
-echo "       - Token: (your InfluxDB token)"
+echo "       - Token: $INFLUX_TOKEN"
 echo "       - Default Bucket: sensor_data"
 echo "  4. Import dashboard from examples/grafana/dashboard.json"
 echo ""
+if [ -f ~/influxdb_credentials.txt ]; then
+    echo "InfluxDB credentials saved to: ~/influxdb_credentials.txt"
+    echo "  - Please store these credentials securely"
+    echo "  - Delete the file after noting the credentials"
+    echo ""
+fi
 echo "Useful commands:"
 echo "  - View Telegraf logs:  sudo journalctl -u telegraf -f"
 echo "  - View InfluxDB logs:  sudo journalctl -u influxdb -f"

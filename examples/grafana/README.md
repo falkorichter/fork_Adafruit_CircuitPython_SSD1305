@@ -45,18 +45,39 @@ The script will:
 3. Configure Telegraf with MQTT consumer and custom processing
 4. Start all services
 
-**Time required**: ~15 minutes
+**Time required**: ~10-15 minutes (fully automated, no manual steps)
 
-### Configuration Steps
+### Automated Installation
 
-1. **Complete InfluxDB Setup**
-   - Open http://localhost:8086 in your browser
-   - Create initial user
-   - Create organization: `sensors`
-   - Create bucket: `sensor_data`
-   - Generate API token and save it securely
+The setup script now performs **fully automated installation** including:
+- InfluxDB installation via APT repository
+- Automated InfluxDB configuration using CLI (no web UI required)
+- Automatic token generation and configuration
+- Telegraf installation and configuration
 
-2. **Add InfluxDB to Grafana**
+```bash
+cd examples/grafana
+chmod +x setup_grafana_integration.sh
+./setup_grafana_integration.sh
+```
+
+The script will:
+1. Add InfluxDB repository and install InfluxDB 2.x
+2. Automatically configure InfluxDB with:
+   - Organization: `sensors`
+   - Bucket: `sensor_data`
+   - Auto-generated credentials (saved to `~/influxdb_credentials.txt`)
+3. Install Telegraf from the repository
+4. Configure Telegraf with the generated InfluxDB token
+5. Start all services and verify connectivity
+
+**No manual setup required!** The script handles everything automatically.
+
+### Adding InfluxDB to Grafana
+
+After the automated setup completes:
+
+1. **Add InfluxDB Datasource to Grafana**
    - Open Grafana: http://localhost:3000
    - Go to: Configuration → Data Sources → Add data source
    - Select: InfluxDB
@@ -64,17 +85,17 @@ The script will:
      - Query Language: **Flux**
      - URL: `http://localhost:8086`
      - Organization: `sensors`
-     - Token: (paste your InfluxDB token)
+     - Token: (use the token from the setup script output or `~/influxdb_credentials.txt`)
      - Default Bucket: `sensor_data`
    - Click "Save & Test"
 
-3. **Import Dashboard**
+2. **Import Dashboard**
    - In Grafana: Dashboards → Import
    - Upload `dashboard.json` from this directory
    - Select your InfluxDB datasource
    - Click "Import"
 
-4. **Verify Data Flow**
+3. **Verify Data Flow**
    ```bash
    # Check Telegraf is receiving MQTT messages
    sudo journalctl -u telegraf -f
@@ -169,34 +190,52 @@ If you prefer manual setup instead of using the automated script:
 ### 1. Install InfluxDB
 
 ```bash
-# For ARM64 (Raspberry Pi 4)
-wget https://dl.influxdata.com/influxdb/releases/influxdb2-2.7.4-arm64.deb
-sudo dpkg -i influxdb2-2.7.4-arm64.deb
+# Add InfluxDB repository
+wget -q https://repos.influxdata.com/influxdata-archive_compat.key
+echo '393e8779c89ac8d958f81f942f9ad7fb82a25e133faddaf92e15b16e6ac9ce4c influxdata-archive_compat.key' | sha256sum -c
+cat influxdata-archive_compat.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null
 
-# For ARMv7 (Raspberry Pi 3)
-wget https://dl.influxdata.com/influxdb/releases/influxdb2-2.7.4-armhf.deb
-sudo dpkg -i influxdb2-2.7.4-armhf.deb
+echo 'deb [signed-by=/etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg] https://repos.influxdata.com/debian stable main' | sudo tee /etc/apt/sources.list.d/influxdata.list
+
+# Install InfluxDB
+sudo apt-get update
+sudo apt-get install -y influxdb2
 
 # Start service
 sudo systemctl enable influxdb
 sudo systemctl start influxdb
 ```
 
-Complete setup at: http://localhost:8086
-
-### 2. Install Telegraf
+### 2. Configure InfluxDB (automated via CLI)
 
 ```bash
-# For ARM64
-wget https://dl.influxdata.com/telegraf/releases/telegraf_1.29.0-1_arm64.deb
-sudo dpkg -i telegraf_1.29.0-1_arm64.deb
+# Generate a secure password
+INFLUX_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
 
-# For ARMv7
-wget https://dl.influxdata.com/telegraf/releases/telegraf_1.29.0-1_armhf.deb
-sudo dpkg -i telegraf_1.29.0-1_armhf.deb
+# Automated setup
+influx setup \
+  --username admin \
+  --password "$INFLUX_PASSWORD" \
+  --org sensors \
+  --bucket sensor_data \
+  --retention 0 \
+  --force
+
+# Get the token
+INFLUX_TOKEN=$(influx auth list --json | grep -o '"token":"[^"]*"' | head -1 | cut -d'"' -f4)
+
+echo "Token: $INFLUX_TOKEN"
+echo "Password: $INFLUX_PASSWORD"
 ```
 
-### 3. Configure Telegraf
+### 3. Install Telegraf
+
+```bash
+# Repository already added from InfluxDB installation
+sudo apt-get install -y telegraf
+```
+
+### 4. Configure Telegraf
 
 ```bash
 # Backup existing config
@@ -205,10 +244,8 @@ sudo cp /etc/telegraf/telegraf.conf /etc/telegraf/telegraf.conf.backup
 # Copy our config
 sudo cp telegraf.conf /etc/telegraf/telegraf.conf
 
-# Edit to add your InfluxDB token
-sudo nano /etc/telegraf/telegraf.conf
-# Replace: token = "$INFLUX_TOKEN"
-# With:    token = "your-actual-token-here"
+# Replace token placeholder with actual token
+sudo sed -i "s/\$INFLUX_TOKEN/$INFLUX_TOKEN/g" /etc/telegraf/telegraf.conf
 
 # Test configuration
 sudo telegraf --test --config /etc/telegraf/telegraf.conf
@@ -218,7 +255,7 @@ sudo systemctl enable telegraf
 sudo systemctl start telegraf
 ```
 
-### 4. Verify Data Flow
+### 5. Verify Data Flow
 
 ```bash
 # Check Telegraf logs
