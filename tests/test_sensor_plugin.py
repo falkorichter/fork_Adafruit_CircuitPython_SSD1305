@@ -760,6 +760,60 @@ class TestMQTTPlugin(unittest.TestCase):
             self.assertEqual(data["motion_value"], 24)
             self.assertEqual(data["sths34_temperature"], 0)
 
+    def test_sths34pf80_person_detection(self):
+        """Test STHS34PF80 person detection logic in MQTT plugin"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+            
+            # Test 1: Person detected via high presence value
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 1500,
+                    "Motion (LSB)": 0,
+                    "Temperature (C)": 0,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertTrue(data["person_detected"])
+            
+            # Test 2: Person detected via motion
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 500,
+                    "Motion (LSB)": 10,
+                    "Temperature (C)": 0,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertTrue(data["person_detected"])
+            
+            # Test 3: No person detected (low values)
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 500,
+                    "Motion (LSB)": 0,
+                    "Temperature (C)": 0,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertFalse(data["person_detected"])
+            
+            # Test 4: Edge case - exactly at threshold
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 1000,
+                    "Motion (LSB)": 0,
+                    "Temperature (C)": 0,
+                }
+            }
+            data = plugin._read_sensor_data()
+            self.assertTrue(data["person_detected"])
+
     def test_air_quality_calculation(self):
         """Test BME68x air quality calculation similar to BME680Plugin"""
         with patch.dict("sys.modules", self.paho_patches):

@@ -97,6 +97,15 @@ def main():
             print(f"Motion:         {data['motion_value']} LSB (STHS34PF80)")
             print(f"Obj Temp:       {data['sths34_temperature']} °C (STHS34PF80)")
             
+            # Display person detection status (condensed value)
+            person_status = data.get('person_detected', 'n/a')
+            if person_status == "n/a":
+                print(f"Person Status:  UNKNOWN - No STHS34PF80 data available")
+            elif person_status:
+                print(f"Person Status:  *** PERSON DETECTED *** (Presence >= 1000 OR Motion > 0)")
+            else:
+                print(f"Person Status:  No person detected (Presence < 1000 AND Motion = 0)")
+            
             print(f"\nBattery Voltage: {data['voltage']} V")
             print(f"Battery SOC:     {data['soc']} %")
             print(f"\nWiFi SSID:      {data['ssid']}")
