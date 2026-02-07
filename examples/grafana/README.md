@@ -364,6 +364,25 @@ curl http://localhost:8086/health
 # Should return: {"status":"pass"}
 ```
 
+### After pulling code updates
+
+**If you get Starlark syntax errors after pulling repository updates**, you need to update your installed telegraf.conf:
+
+```bash
+# Copy the updated config to the system location
+sudo cp examples/grafana/telegraf.conf /etc/telegraf/telegraf.conf
+
+# Replace the token placeholder with your actual token
+INFLUX_TOKEN=$(cat ~/influxdb_credentials.txt | grep "Token:" | cut -d' ' -f2)
+sudo sed -i "s/\$INFLUX_TOKEN/$INFLUX_TOKEN/g" /etc/telegraf/telegraf.conf
+
+# Test the configuration
+sudo telegraf --test --config /etc/telegraf/telegraf.conf
+
+# If test passes, restart Telegraf
+sudo systemctl restart telegraf
+```
+
 ### Starlark processor errors
 
 **Enable debug mode in telegraf.conf:**
