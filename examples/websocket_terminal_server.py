@@ -245,10 +245,16 @@ async def main_async(args):
         print("The Rich library uses advanced terminal features (Live display,")
         print("alternate screen buffer) that bypass standard stdout capture.")
         print("This means Rich output may not stream properly to the browser.")
-        print("\nFor best WebSocket streaming experience, use: --script basic")
+        print("\nFor WebSocket streaming, use: --script rich-streaming")
+        print("For terminal-only use, run: python examples/mqtt_sensor_example_rich.py")
         print("=" * 70 + "\n")
         from examples import mqtt_sensor_example_rich  # noqa: PLC0415
         script_main = mqtt_sensor_example_rich.main
+    elif args.script == "rich-streaming":
+        print("\n[INFO] Using Rich streaming-compatible version")
+        print("       Optimized for WebSocket streaming with periodic updates\n")
+        from examples import mqtt_sensor_example_rich_streaming  # noqa: PLC0415
+        script_main = mqtt_sensor_example_rich_streaming.main
     elif args.script == "textual":
         print("\n" + "=" * 70)
         print("WARNING: Textual UI compatibility issue with WebSocket streaming")
@@ -292,9 +298,10 @@ def main():
     )
     parser.add_argument(
         "--script",
-        choices=["basic", "rich", "textual"],
+        choices=["basic", "rich", "rich-streaming", "textual"],
         default="basic",
-        help="Which MQTT example script to run (default: basic)"
+        help="Which MQTT example script to run (default: basic). "
+             "Use 'rich-streaming' for Rich UI compatible with WebSocket streaming."
     )
     parser.add_argument(
         "--mqtt-host",
