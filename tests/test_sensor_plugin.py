@@ -759,6 +759,9 @@ class TestMQTTPlugin(unittest.TestCase):
             self.assertEqual(data["presence_value"], 1377)
             self.assertEqual(data["motion_value"], 24)
             self.assertEqual(data["sths34_temperature"], 0)
+            # Verify person_detected is calculated correctly
+            # With presence=1377 (>=1000) and motion=24 (>0), person should be detected
+            self.assertTrue(data["person_detected"])
 
     def test_sths34pf80_person_detection(self):
         """Test STHS34PF80 person detection logic in MQTT plugin"""
