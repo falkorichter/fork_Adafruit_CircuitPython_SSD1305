@@ -169,8 +169,9 @@ Telegraf processes MQTT sensor data and creates the following fields:
 **Calculated Fields** (created by Starlark processors):
 - `air_quality_score` - BME680 air quality (0-100, higher is better)
 - `gas_baseline` - Rolling average of gas resistance (for air quality calculation)
-- `mag_magnitude` - 3D magnetic field magnitude in µT
-- `mag_baseline` - Rolling average of magnetic field magnitude
+- `mag_magnitude` - 3D magnetic field magnitude in Gauss
+- `mag_baseline` - Median of clean (non-detection) samples (MAD baseline)
+- `mag_z_score` - Robust z-score for current reading (MAD-based)
 - `magnet_detected` - Binary flag (0 or 1) indicating nearby magnet
 - `person_detected` - Binary flag (0 or 1) indicating person presence
 
@@ -192,11 +193,13 @@ from(bucket: "sensor_data")
 
 ### Magnet Detection
 
-Implements MMC5983 detection from `sensor_plugins/mmc5983_plugin.py`:
+Implements robust MMC5983 detection from `sensor_plugins/magnet_detector.py` using Median Absolute Deviation (MAD):
 
-- **Baseline**: Rolling 20-sample average of magnetic field magnitude
-- **Detection**: Triggers when magnitude > 2× baseline
-- **Output**: Binary flag (0 = no magnet, 1 = magnet detected)
+- **Baseline**: Median of up to 50 clean (non-detection) samples — not polluted by magnet readings
+- **MAD-based anomaly detection**: Robust z-score = |magnitude − median| / (MAD × 1.4826)
+- **Hysteresis (Schmitt trigger)**: Triggers at z-score > 5.0σ, releases at < 3.0σ — prevents oscillation
+- **Bidirectional**: Detects both magnet approach (field increase) and removal (field decrease)
+- **Output**: Binary flag (0 = no magnet, 1 = magnet detected), plus `mag_z_score` for diagnostics
 
 **Grafana Query Example:**
 ```flux
@@ -456,12 +459,12 @@ The queries expect these field names (set in telegraf.conf):
 - `air_quality_score` - Air quality score (0-100)
 - `VEML7700_Lux` - Light level in lux
 - `mag_magnitude` - Magnetic field magnitude
-- `mag_baseline` - Magnetic field baseline
+- `mag_baseline` - Magnetic field baseline (MAD-based median)
+- `mag_z_score` - Robust z-score for magnet detection
 - `magnet_detected` - Magnet detection flag (0/1)
 - `person_detected` - Person detection flag (0/1)
 
 **Note**: The field is named `air_quality_score` (not `air_quality`). If queries show no data, verify field names with the command in step 3 above.
-- `person_detected` - Person detection flag (0/1)
 
 ### After pulling code updates
 
