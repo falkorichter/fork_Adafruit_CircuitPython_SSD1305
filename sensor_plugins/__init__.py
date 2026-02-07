@@ -6,6 +6,7 @@ from sensor_plugins.base import SensorPlugin
 from sensor_plugins.bme680_plugin import BME680Plugin
 from sensor_plugins.keyboard_plugin import KeyboardPlugin
 from sensor_plugins.mqtt_plugin import MQTTPlugin
+from sensor_plugins.sths34pf80_plugin import STHS34PF80Plugin
 from sensor_plugins.system_info_plugin import CPULoadPlugin, IPAddressPlugin, MemoryUsagePlugin
 from sensor_plugins.tmp117_plugin import TMP117Plugin
 from sensor_plugins.veml7700_plugin import VEML7700Plugin
@@ -15,6 +16,7 @@ __all__ = [
     "TMP117Plugin",
     "BME680Plugin",
     "VEML7700Plugin",
+    "STHS34PF80Plugin",
     "IPAddressPlugin",
     "CPULoadPlugin",
     "MemoryUsagePlugin",

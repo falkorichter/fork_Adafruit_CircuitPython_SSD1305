@@ -127,6 +127,10 @@ class MQTTPlugin(SensorPlugin):
             "soc": "n/a",
             "ssid": "n/a",
             "rssi": "n/a",
+            "presence_value": "n/a",
+            "motion_value": "n/a",
+            "sths34_temperature": "n/a",
+            "person_detected": "n/a",
         }
 
         if not self.message_received or self.latest_message is None:
@@ -236,6 +240,29 @@ class MQTTPlugin(SensorPlugin):
             if "RSSI" in sys_data:
                 result["rssi"] = sys_data["RSSI"]
 
+        # Extract STHS34PF80 data
+        if "STHS34PF80" in self.latest_message:
+            sths_data = self.latest_message["STHS34PF80"]
+            if "Presence (cm^-1)" in sths_data:
+                result["presence_value"] = sths_data["Presence (cm^-1)"]
+            if "Motion (LSB)" in sths_data:
+                result["motion_value"] = sths_data["Motion (LSB)"]
+            if "Temperature (C)" in sths_data:
+                result["sths34_temperature"] = sths_data["Temperature (C)"]
+            
+            # Calculate person detection status
+            # Person is detected if presence value >= 1000 OR motion value > 0
+            # Using same threshold as STHS34PF80Plugin default
+            presence_threshold = 1000
+            if result["presence_value"] != "n/a" and result["motion_value"] != "n/a":
+                presence_detected = result["presence_value"] >= presence_threshold
+                motion_detected = result["motion_value"] > 0
+                result["person_detected"] = presence_detected or motion_detected
+            elif result["presence_value"] != "n/a":
+                result["person_detected"] = result["presence_value"] >= presence_threshold
+            elif result["motion_value"] != "n/a":
+                result["person_detected"] = result["motion_value"] > 0
+
         return result
 
     def _get_unavailable_data(self) -> Dict[str, Any]:
@@ -252,6 +279,10 @@ class MQTTPlugin(SensorPlugin):
             "soc": "n/a",
             "ssid": "n/a",
             "rssi": "n/a",
+            "presence_value": "n/a",
+            "motion_value": "n/a",
+            "sths34_temperature": "n/a",
+            "person_detected": "n/a",
         }
 
     def format_display(self, data: Dict[str, Any]) -> str:
