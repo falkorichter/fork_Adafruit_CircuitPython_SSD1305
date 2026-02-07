@@ -1,12 +1,17 @@
 """
-MMC5983 magnetometer sensor plugin with automatic magnet detection
+MMC5983 magnetometer sensor plugin with robust magnet detection.
+
+Uses Median Absolute Deviation (MAD) for outlier-resistant anomaly
+detection with conditional baseline updates and hysteresis to prevent
+baseline drift and oscillation.  See ``magnet_detector.MagnetDetector``
+for full algorithm details.
 """
 
 import math
-from collections import deque
 from typing import Any, Dict
 
 from sensor_plugins.base import SensorPlugin
+from sensor_plugins.magnet_detector import MagnetDetector
 
 
 class MMC5983Plugin(SensorPlugin):
@@ -15,28 +20,34 @@ class MMC5983Plugin(SensorPlugin):
     def __init__(
         self,
         check_interval: float = 5.0,
-        moving_average_samples: int = 20,
-        detection_threshold: float = 2.0,
+        baseline_samples: int = 50,
+        detection_sigma: float = 5.0,
+        release_sigma: float = 3.0,
+        min_baseline_samples: int = 10,
     ):
         """
         Initialize MMC5983 sensor plugin
-        
+
         :param check_interval: How often to check if hardware is available
-        :param moving_average_samples: Number of samples for moving average baseline
-        :param detection_threshold: Multiplier for detection (2.0 = 2x baseline)
+        :param baseline_samples: Max clean samples kept for MAD baseline
+        :param detection_sigma: MAD-sigma threshold for triggering detection
+        :param release_sigma: MAD-sigma threshold for releasing detection
+        :param min_baseline_samples: Minimum samples before detection starts
         """
         super().__init__("MMC5983", check_interval)
-        self.moving_average_samples = moving_average_samples
-        self.detection_threshold = detection_threshold
-        self.magnitude_history = deque(maxlen=moving_average_samples)
-        self.baseline_magnitude = None
+        self.detector = MagnetDetector(
+            baseline_samples=baseline_samples,
+            detection_sigma=detection_sigma,
+            release_sigma=release_sigma,
+            min_baseline_samples=min_baseline_samples,
+        )
 
     @property
     def requires_background_updates(self) -> bool:
         """
-        MMC5983 requires background updates to maintain moving average baseline
+        MMC5983 requires background updates to maintain the baseline
         for magnet detection.
-        
+
         :return: True - needs background updates for baseline tracking
         """
         return True
@@ -50,10 +61,11 @@ class MMC5983Plugin(SensorPlugin):
         sensor = adafruit_mmc56x3.MMC5983(i2c)
         return sensor
 
-    def _calculate_magnitude(self, x: float, y: float, z: float) -> float:
+    @staticmethod
+    def _calculate_magnitude(x: float, y: float, z: float) -> float:
         """
         Calculate the magnitude of the 3D magnetic field vector
-        
+
         :param x: X-axis magnetic field (Gauss)
         :param y: Y-axis magnetic field (Gauss)
         :param z: Z-axis magnetic field (Gauss)
@@ -61,49 +73,14 @@ class MMC5983Plugin(SensorPlugin):
         """
         return math.sqrt(x**2 + y**2 + z**2)
 
-    def _update_baseline(self, magnitude: float) -> None:
-        """
-        Update the moving average baseline
-        
-        :param magnitude: Current magnetic field magnitude
-        """
-        self.magnitude_history.append(magnitude)
-        
-        # Calculate baseline as average of history
-        if len(self.magnitude_history) > 0:
-            self.baseline_magnitude = sum(self.magnitude_history) / len(
-                self.magnitude_history
-            )
-
-    def _detect_magnet(self, magnitude: float) -> bool:
-        """
-        Detect if a magnet is close based on deviation from baseline
-        
-        :param magnitude: Current magnetic field magnitude
-        :return: True if magnet is detected, False otherwise
-        """
-        if self.baseline_magnitude is None:
-            return False
-        
-        # Detect if current magnitude is significantly higher than baseline
-        # Use threshold multiplier (e.g., 2.0 means 2x the baseline)
-        return magnitude > (self.baseline_magnitude * self.detection_threshold)
-
     def _read_sensor_data(self) -> Dict[str, Any]:
         """Read magnetic field data from MMC5983"""
-        # Read raw magnetic field values
         mag_x, mag_y, mag_z = self.sensor_instance.magnetic
         temperature = self.sensor_instance.temperature
-        
-        # Calculate magnitude of the 3D vector
+
         magnitude = self._calculate_magnitude(mag_x, mag_y, mag_z)
-        
-        # Update baseline with current reading
-        self._update_baseline(magnitude)
-        
-        # Detect if magnet is close
-        magnet_detected = self._detect_magnet(magnitude)
-        
+        magnet_detected, baseline, z_score = self.detector.update(magnitude)
+
         return {
             "mag_x": mag_x,
             "mag_y": mag_y,
@@ -111,7 +88,8 @@ class MMC5983Plugin(SensorPlugin):
             "magnitude": magnitude,
             "temperature": temperature,
             "magnet_detected": magnet_detected,
-            "baseline": self.baseline_magnitude,
+            "baseline": baseline,
+            "detection_z_score": z_score,
         }
 
     def _get_unavailable_data(self) -> Dict[str, Any]:
@@ -124,16 +102,17 @@ class MMC5983Plugin(SensorPlugin):
             "temperature": "n/a",
             "magnet_detected": "n/a",
             "baseline": "n/a",
+            "detection_z_score": "n/a",
         }
 
     def format_display(self, data: Dict[str, Any]) -> str:
         """Format magnetic sensor data for display"""
         magnitude = data.get("magnitude", "n/a")
         magnet_detected = data.get("magnet_detected", "n/a")
-        
+
         if magnitude == "n/a":
             return "MAG:n/a"
-        
+
         if magnet_detected:
             return f"MAG:{magnitude:.2f}G 🧲"
         else:

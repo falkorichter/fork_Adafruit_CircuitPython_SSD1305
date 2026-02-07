@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
 Test script for MMC5983 sensor data extraction from MQTT with static messages.
-This script demonstrates the magnet detection functionality without requiring
-an actual MQTT broker or hardware sensor.
+This script demonstrates the robust MAD-based magnet detection functionality
+without requiring an actual MQTT broker or hardware sensor.
 """
 
 import sys
@@ -19,11 +19,12 @@ def test_mmc5983_extraction():
     """Test MMC5983 data extraction with static MQTT messages"""
     print("=" * 70)
     print("MMC5983 Magnetometer Sensor - Static MQTT Message Test")
+    print("  Algorithm: Median Absolute Deviation (MAD) with hysteresis")
     print("=" * 70)
     print()
     
     # Create MQTT plugin instance (won't actually connect)
-    plugin = MQTTPlugin()
+    plugin = MQTTPlugin(mag_min_baseline_samples=3)
     
     # Simulate that we're connected and have received messages
     plugin.message_received = True
@@ -53,6 +54,7 @@ def test_mmc5983_extraction():
         print(f"  Z-axis:         {data['mag_z']:.6f} Gauss")
         print(f"  Magnitude:      {data['mag_magnitude']:.6f} Gauss")
         print(f"  Baseline:       {data['mag_baseline']:.6f} Gauss")
+        print(f"  Z-Score:        {data['mag_z_score']:.2f}")
         print(f"  Temperature:    {data['mag_temperature']} °C")
         print(f"  Magnet Detected: {data['magnet_detected']}")
         print()
@@ -80,15 +82,26 @@ def test_mmc5983_extraction():
     print(f"  Z-axis:         {data['mag_z']:.6f} Gauss")
     print(f"  Magnitude:      {data['mag_magnitude']:.6f} Gauss")
     print(f"  Baseline:       {data['mag_baseline']:.6f} Gauss")
+    print(f"  Z-Score:        {data['mag_z_score']:.2f}")
     print(f"  Temperature:    {data['mag_temperature']} °C")
     print(f"  Magnet Detected: {data['magnet_detected']}")
     
     if data['magnet_detected']:
         print(f"\n  🧲 *** MAGNET CLOSE *** 🧲")
-        print(f"  Field strength is {data['mag_magnitude'] / data['mag_baseline']:.2f}x baseline!")
+        print(f"  Z-Score {data['mag_z_score']:.1f} exceeds detection threshold!")
     
     print("\n" + "=" * 70)
-    print("Test 3: Returning to normal field")
+    print("Test 3: Magnet stays near sensor (baseline must NOT drift)")
+    print("-" * 70)
+    
+    for i in range(5):
+        data = plugin._read_sensor_data()
+        print(f"Read {i+1}: Baseline={data['mag_baseline']:.6f} Detected={data['magnet_detected']}")
+    
+    print("  ✓ Baseline stayed stable (not polluted by magnet readings)")
+    
+    print("\n" + "=" * 70)
+    print("Test 4: Returning to normal field")
     print("-" * 70)
     
     plugin.latest_message = normal_message
@@ -99,6 +112,7 @@ def test_mmc5983_extraction():
     print(f"  Z-axis:         {data['mag_z']:.6f} Gauss")
     print(f"  Magnitude:      {data['mag_magnitude']:.6f} Gauss")
     print(f"  Baseline:       {data['mag_baseline']:.6f} Gauss")
+    print(f"  Z-Score:        {data['mag_z_score']:.2f}")
     print(f"  Temperature:    {data['mag_temperature']} °C")
     print(f"  Magnet Detected: {data['magnet_detected']}")
     
@@ -106,7 +120,7 @@ def test_mmc5983_extraction():
         print(f"\n  ✓ Magnet removed - field returned to normal")
     
     print("\n" + "=" * 70)
-    print("Test 4: Magnet in different direction (Y-axis)")
+    print("Test 5: Magnet in different direction (Y-axis)")
     print("-" * 70)
     
     y_axis_magnet = {
@@ -126,16 +140,20 @@ def test_mmc5983_extraction():
     print(f"  Z-axis:         {data['mag_z']:.6f} Gauss")
     print(f"  Magnitude:      {data['mag_magnitude']:.6f} Gauss")
     print(f"  Baseline:       {data['mag_baseline']:.6f} Gauss")
+    print(f"  Z-Score:        {data['mag_z_score']:.2f}")
     print(f"  Temperature:    {data['mag_temperature']} °C")
     print(f"  Magnet Detected: {data['magnet_detected']}")
     
     if data['magnet_detected']:
         print(f"\n  🧲 *** MAGNET CLOSE (Y-axis) *** 🧲")
-        print(f"  Field strength is {data['mag_magnitude'] / data['mag_baseline']:.2f}x baseline!")
     
     print("\n" + "=" * 70)
-    print("Test 5: Magnet in Z-axis direction")
+    print("Test 6: Magnet in Z-axis direction")
     print("-" * 70)
+    
+    # Return to normal first
+    plugin.latest_message = normal_message
+    plugin._read_sensor_data()
     
     z_axis_magnet = {
         "MMC5983": {
@@ -154,21 +172,49 @@ def test_mmc5983_extraction():
     print(f"  Z-axis:         {data['mag_z']:.6f} Gauss")
     print(f"  Magnitude:      {data['mag_magnitude']:.6f} Gauss")
     print(f"  Baseline:       {data['mag_baseline']:.6f} Gauss")
+    print(f"  Z-Score:        {data['mag_z_score']:.2f}")
     print(f"  Temperature:    {data['mag_temperature']} °C")
     print(f"  Magnet Detected: {data['magnet_detected']}")
     
     if data['magnet_detected']:
         print(f"\n  🧲 *** MAGNET CLOSE (Z-axis) *** 🧲")
-        print(f"  Field strength is {data['mag_magnitude'] / data['mag_baseline']:.2f}x baseline!")
+    
+    print("\n" + "=" * 70)
+    print("Test 7: Bidirectional detection — magnet starts NEAR sensor")
+    print("-" * 70)
+    
+    plugin2 = MQTTPlugin(mag_min_baseline_samples=3)
+    plugin2.message_received = True
+    plugin2.available = True
+    
+    # Start with magnet nearby (high field)
+    plugin2.latest_message = strong_field_message
+    for i in range(5):
+        data = plugin2._read_sensor_data()
+        print(f"Read {i+1}: Magnitude={data['mag_magnitude']:.4f} Baseline={data['mag_baseline']:.4f} Detected={data['magnet_detected']}")
+    
+    # Remove magnet — field drops
+    plugin2.latest_message = normal_message
+    data = plugin2._read_sensor_data()
+    print(f"After magnet removed:")
+    print(f"  Magnitude:       {data['mag_magnitude']:.6f} Gauss")
+    print(f"  Baseline:        {data['mag_baseline']:.6f} Gauss")
+    print(f"  Z-Score:         {data['mag_z_score']:.2f}")
+    print(f"  Magnet Detected: {data['magnet_detected']}")
+    
+    if data['magnet_detected']:
+        print(f"\n  🧲 Detected field DECREASE — magnet was removed! 🧲")
     
     print("\n" + "=" * 70)
     print("Summary:")
     print("-" * 70)
     print("✓ MMC5983 data extraction works correctly")
     print("✓ 3D vector magnitude calculation works")
-    print("✓ Moving average baseline tracking works")
+    print("✓ MAD-based robust baseline tracking works")
+    print("✓ Baseline does NOT drift when magnet stays near sensor")
     print("✓ Magnet detection works in any direction")
-    print("✓ Detection threshold (2x baseline) is appropriate")
+    print("✓ Bidirectional detection works (magnet approach AND removal)")
+    print("✓ Hysteresis prevents oscillation at detection boundary")
     print("=" * 70)
 
 

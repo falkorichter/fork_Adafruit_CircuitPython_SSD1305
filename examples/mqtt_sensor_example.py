@@ -145,7 +145,7 @@ def main():
             if magnet_status == "n/a":
                 print(f"Magnet Status:  UNKNOWN - No MMC5983 data available")
             elif magnet_status:
-                print(f"Magnet Status:  *** MAGNET CLOSE *** (Magnitude > 2x baseline)")
+                print(f"Magnet Status:  *** MAGNET CLOSE *** (MAD z-score exceeds threshold)")
             else:
                 print(f"Magnet Status:  No magnet detected (normal field strength)")
             

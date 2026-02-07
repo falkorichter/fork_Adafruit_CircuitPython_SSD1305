@@ -5,10 +5,10 @@ MQTT virtual sensor plugin
 import json
 import math
 import time
-from collections import deque
 from typing import Any, Dict, Optional
 
 from sensor_plugins.base import SensorPlugin
+from sensor_plugins.magnet_detector import MagnetDetector
 
 
 class MQTTPlugin(SensorPlugin):
@@ -21,8 +21,10 @@ class MQTTPlugin(SensorPlugin):
         topic: str = "iot_logger",
         check_interval: float = 5.0,
         burn_in_time: float = 300,
-        mag_moving_average_samples: int = 20,
-        mag_detection_threshold: float = 2.0,
+        mag_baseline_samples: int = 50,
+        mag_detection_sigma: float = 5.0,
+        mag_release_sigma: float = 3.0,
+        mag_min_baseline_samples: int = 10,
     ):
         """
         Initialize MQTT sensor plugin
@@ -32,8 +34,10 @@ class MQTTPlugin(SensorPlugin):
         :param topic: MQTT topic to subscribe to
         :param check_interval: How often to check if MQTT is available
         :param burn_in_time: BME68x burn-in period in seconds
-        :param mag_moving_average_samples: Number of samples for magnetic baseline
-        :param mag_detection_threshold: Multiplier for magnet detection
+        :param mag_baseline_samples: Max clean samples for magnetic baseline
+        :param mag_detection_sigma: MAD-sigma threshold for magnet detection
+        :param mag_release_sigma: MAD-sigma threshold for releasing detection
+        :param mag_min_baseline_samples: Minimum samples before detection starts
         """
         super().__init__("MQTT", check_interval)
         self.broker_host = broker_host
@@ -51,11 +55,13 @@ class MQTTPlugin(SensorPlugin):
         self.hum_weighting = 0.25
         self.burn_in_complete = False
         
-        # MMC5983 magnet detection state
-        self.mag_moving_average_samples = mag_moving_average_samples
-        self.mag_detection_threshold = mag_detection_threshold
-        self.magnitude_history = deque(maxlen=mag_moving_average_samples)
-        self.mag_baseline = None
+        # MMC5983 magnet detection (robust MAD-based detector)
+        self.mag_detector = MagnetDetector(
+            baseline_samples=mag_baseline_samples,
+            detection_sigma=mag_detection_sigma,
+            release_sigma=mag_release_sigma,
+            min_baseline_samples=mag_min_baseline_samples,
+        )
 
     @property
     def requires_background_updates(self) -> bool:
@@ -150,6 +156,7 @@ class MQTTPlugin(SensorPlugin):
             "mag_temperature": "n/a",
             "magnet_detected": "n/a",
             "mag_baseline": "n/a",
+            "mag_z_score": "n/a",
         }
 
         if not self.message_received or self.latest_message is None:
@@ -308,18 +315,11 @@ class MQTTPlugin(SensorPlugin):
                 )
                 result["mag_magnitude"] = magnitude
                 
-                # Update moving average baseline
-                self.magnitude_history.append(magnitude)
-                self.mag_baseline = sum(self.magnitude_history) / len(
-                    self.magnitude_history
-                )
-                result["mag_baseline"] = self.mag_baseline
-                
-                # Detect magnet based on deviation from baseline
-                if self.mag_baseline is not None:
-                    result["magnet_detected"] = (
-                        magnitude > self.mag_baseline * self.mag_detection_threshold
-                    )
+                # Robust magnet detection via MAD-based detector
+                detected, baseline, z_score = self.mag_detector.update(magnitude)
+                result["mag_baseline"] = baseline
+                result["magnet_detected"] = detected
+                result["mag_z_score"] = z_score
 
         return result
 
@@ -348,6 +348,7 @@ class MQTTPlugin(SensorPlugin):
             "mag_temperature": "n/a",
             "magnet_detected": "n/a",
             "mag_baseline": "n/a",
+            "mag_z_score": "n/a",
         }
 
     def format_display(self, data: Dict[str, Any]) -> str:

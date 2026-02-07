@@ -1028,6 +1028,120 @@ class TestSTHS34PF80Plugin(unittest.TestCase):
             self.assertIn("n/a", display)
 
 
+class TestMagnetDetector(unittest.TestCase):
+    """Test robust MAD-based magnet detector"""
+
+    def test_calibration_phase(self):
+        """No detection during calibration (< min_baseline_samples)"""
+        from sensor_plugins.magnet_detector import MagnetDetector
+
+        detector = MagnetDetector(min_baseline_samples=5)
+        for _ in range(4):
+            detected, _, z = detector.update(1.0)
+            self.assertFalse(detected)
+            self.assertEqual(z, 0.0)
+
+    def test_detection_after_calibration(self):
+        """Detect a large deviation after calibration completes"""
+        from sensor_plugins.magnet_detector import MagnetDetector
+
+        detector = MagnetDetector(min_baseline_samples=5, detection_sigma=5.0)
+        for _ in range(5):
+            detector.update(1.0)
+
+        # Large outlier — should trigger detection
+        detected, baseline, z = detector.update(10.0)
+        self.assertTrue(detected)
+        self.assertAlmostEqual(baseline, 1.0)
+        self.assertGreater(z, 5.0)
+
+    def test_no_false_positive_on_small_deviation(self):
+        """Small deviation should NOT trigger detection"""
+        from sensor_plugins.magnet_detector import MagnetDetector
+
+        detector = MagnetDetector(min_baseline_samples=5, detection_sigma=5.0)
+        for _ in range(10):
+            detector.update(1.0)
+
+        detected, _, _ = detector.update(1.02)
+        self.assertFalse(detected)
+
+    def test_hysteresis(self):
+        """Verify Schmitt-trigger hysteresis between detect/release"""
+        from sensor_plugins.magnet_detector import MagnetDetector
+
+        detector = MagnetDetector(
+            min_baseline_samples=5, detection_sigma=5.0, release_sigma=3.0
+        )
+        # Build baseline
+        for _ in range(10):
+            detector.update(1.0)
+
+        # Trigger detection
+        detected, _, _ = detector.update(10.0)
+        self.assertTrue(detected)
+
+        # Still above release threshold — stays detected
+        detected, _, z = detector.update(5.0)
+        # z should still be high because 5.0 is far from baseline of 1.0
+        self.assertTrue(detected)
+
+        # Return to baseline — release detection
+        detected, _, _ = detector.update(1.0)
+        self.assertFalse(detected)
+
+    def test_baseline_not_polluted_during_detection(self):
+        """Baseline must NOT update while magnet is detected"""
+        from sensor_plugins.magnet_detector import MagnetDetector
+
+        detector = MagnetDetector(min_baseline_samples=5, detection_sigma=5.0)
+        for _ in range(10):
+            detector.update(1.0)
+
+        baseline_before = MagnetDetector._median(detector.clean_history)
+
+        # Trigger detection, send many high readings
+        for _ in range(20):
+            detector.update(10.0)
+
+        baseline_after = MagnetDetector._median(detector.clean_history)
+        self.assertAlmostEqual(baseline_before, baseline_after)
+
+    def test_bidirectional_detection(self):
+        """Detect magnet removal (magnitude DROP from high baseline)"""
+        from sensor_plugins.magnet_detector import MagnetDetector
+
+        # Simulate sensor starting with a magnet nearby
+        detector = MagnetDetector(min_baseline_samples=5, detection_sigma=5.0)
+        for _ in range(10):
+            detector.update(5.0)
+
+        # Magnet removed → field drops to Earth's field
+        detected, _, _ = detector.update(0.5)
+        self.assertTrue(detected)
+
+    def test_reset(self):
+        """Reset clears all state"""
+        from sensor_plugins.magnet_detector import MagnetDetector
+
+        detector = MagnetDetector(min_baseline_samples=3)
+        for _ in range(5):
+            detector.update(1.0)
+        detector.update(10.0)  # trigger
+
+        detector.reset()
+        self.assertEqual(len(detector.clean_history), 0)
+        self.assertFalse(detector.magnet_detected)
+
+    def test_median_calculation(self):
+        """Verify static median helper"""
+        from sensor_plugins.magnet_detector import MagnetDetector
+
+        self.assertEqual(MagnetDetector._median([1, 2, 3]), 2.0)
+        self.assertEqual(MagnetDetector._median([1, 2, 3, 4]), 2.5)
+        self.assertEqual(MagnetDetector._median([5]), 5.0)
+
+
 class TestMMC5983Plugin(unittest.TestCase):
     """Test MMC5983 magnetometer sensor plugin"""
 
@@ -1074,52 +1188,53 @@ class TestMMC5983Plugin(unittest.TestCase):
             self.assertAlmostEqual(magnitude, 5.0, places=5)
 
     def test_baseline_calculation(self):
-        """Test moving average baseline calculation"""
+        """Test MAD-based baseline calculation"""
         with patch.dict(
             "sys.modules",
             {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
         ):
             from sensor_plugins import MMC5983Plugin
 
-            plugin = MMC5983Plugin(moving_average_samples=5)
+            plugin = MMC5983Plugin(baseline_samples=50, min_baseline_samples=3)
             
-            # Initially no baseline
-            self.assertIsNone(plugin.baseline_magnitude)
+            # Detector starts with empty clean history
+            self.assertEqual(len(plugin.detector.clean_history), 0)
             
-            # Add samples
-            plugin._update_baseline(1.0)
-            self.assertAlmostEqual(plugin.baseline_magnitude, 1.0)
+            # Feed stable values through the detector
+            plugin.detector.update(1.0)
+            plugin.detector.update(1.0)
+            plugin.detector.update(1.0)
             
-            plugin._update_baseline(2.0)
-            self.assertAlmostEqual(plugin.baseline_magnitude, 1.5)
-            
-            plugin._update_baseline(3.0)
-            self.assertAlmostEqual(plugin.baseline_magnitude, 2.0)
+            # Baseline (median) should be 1.0
+            _, baseline, _ = plugin.detector.update(1.0)
+            self.assertAlmostEqual(baseline, 1.0)
 
     def test_magnet_detection(self):
-        """Test magnet proximity detection"""
+        """Test magnet proximity detection via MagnetDetector"""
         with patch.dict(
             "sys.modules",
             {"adafruit_mmc56x3": self.mmc_module, "board": self.board_module},
         ):
             from sensor_plugins import MMC5983Plugin
 
-            plugin = MMC5983Plugin(detection_threshold=2.0)
+            plugin = MMC5983Plugin(
+                min_baseline_samples=5,
+                detection_sigma=5.0,
+                release_sigma=3.0,
+            )
             
-            # No detection without baseline
-            self.assertFalse(plugin._detect_magnet(5.0))
+            # No detection during calibration
+            for _ in range(5):
+                detected, _, _ = plugin.detector.update(1.0)
+                self.assertFalse(detected)
             
-            # Set baseline to 1.0
-            plugin._update_baseline(1.0)
+            # Small deviation — no detection
+            detected, _, _ = plugin.detector.update(1.02)
+            self.assertFalse(detected)
             
-            # Test: 1.5 < 2.0 threshold, no detection
-            self.assertFalse(plugin._detect_magnet(1.5))
-            
-            # Test: 2.5 > 2.0 threshold, magnet detected
-            self.assertTrue(plugin._detect_magnet(2.5))
-            
-            # Test: exactly at threshold (2.0)
-            self.assertFalse(plugin._detect_magnet(2.0))
+            # Huge deviation — magnet detected
+            detected, _, _ = plugin.detector.update(5.0)
+            self.assertTrue(detected)
 
     def test_magnet_detection_with_reads(self):
         """Test magnet detection through actual sensor reads"""
@@ -1130,25 +1245,24 @@ class TestMMC5983Plugin(unittest.TestCase):
             from sensor_plugins import MMC5983Plugin
 
             plugin = MMC5983Plugin(
-                moving_average_samples=3, detection_threshold=2.0
+                baseline_samples=50, min_baseline_samples=3,
+                detection_sigma=5.0, release_sigma=3.0,
             )
             
-            # First read - establish baseline
-            self.mock_sensor.magnetic = (0.1, 0.0, 0.0)
-            data = plugin.read()
-            self.assertFalse(data["magnet_detected"])  # No detection yet
-            
-            # Second read - still establishing baseline
+            # Calibration reads
             self.mock_sensor.magnetic = (0.1, 0.0, 0.0)
             data = plugin.read()
             self.assertFalse(data["magnet_detected"])
             
-            # Third read - baseline established
             self.mock_sensor.magnetic = (0.1, 0.0, 0.0)
             data = plugin.read()
             self.assertFalse(data["magnet_detected"])
             
-            # Fourth read - strong field (magnet close)
+            self.mock_sensor.magnetic = (0.1, 0.0, 0.0)
+            data = plugin.read()
+            self.assertFalse(data["magnet_detected"])
+            
+            # Strong field (magnet close) — should be detected
             self.mock_sensor.magnetic = (5.0, 0.0, 0.0)
             data = plugin.read()
             self.assertTrue(data["magnet_detected"])
@@ -1170,6 +1284,7 @@ class TestMMC5983Plugin(unittest.TestCase):
             self.assertEqual(data["temperature"], "n/a")
             self.assertEqual(data["magnet_detected"], "n/a")
             self.assertEqual(data["baseline"], "n/a")
+            self.assertEqual(data["detection_z_score"], "n/a")
 
     def test_format_display_normal(self):
         """Test display formatting with normal field"""
@@ -1288,12 +1403,12 @@ class TestMQTTPluginMMC5983(unittest.TestCase):
         with patch.dict("sys.modules", self.paho_patches):
             from sensor_plugins import MQTTPlugin
 
-            plugin = MQTTPlugin(mag_detection_threshold=2.0)
+            plugin = MQTTPlugin(mag_min_baseline_samples=3)
             plugin.sensor_instance = self.mock_client
             plugin.available = True
             plugin.message_received = True
 
-            # First read - establish baseline (magnitude = 1.0)
+            # Establish baseline with 3 clean reads (magnitude = 1.0)
             plugin.latest_message = {
                 "MMC5983": {
                     "X Field (Gauss)": 1.0,
@@ -1302,16 +1417,12 @@ class TestMQTTPluginMMC5983(unittest.TestCase):
                     "Temperature (C)": 20,
                 }
             }
-            data = plugin._read_sensor_data()
-            self.assertAlmostEqual(data["mag_baseline"], 1.0)
-            self.assertFalse(data["magnet_detected"])
+            for _ in range(3):
+                data = plugin._read_sensor_data()
+                self.assertAlmostEqual(data["mag_baseline"], 1.0)
+                self.assertFalse(data["magnet_detected"])
 
-            # Second read - still normal (magnitude = 1.0)
-            data = plugin._read_sensor_data()
-            self.assertAlmostEqual(data["mag_baseline"], 1.0)
-            self.assertFalse(data["magnet_detected"])
-
-            # Third read - strong field (magnitude = 5.0 > 2.0 * baseline)
+            # Strong field — magnet detected (magnitude 5.0 >> baseline 1.0)
             plugin.latest_message = {
                 "MMC5983": {
                     "X Field (Gauss)": 5.0,
