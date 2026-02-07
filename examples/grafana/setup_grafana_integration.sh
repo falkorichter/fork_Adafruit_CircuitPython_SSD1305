@@ -75,13 +75,36 @@ else
     print_info "Adding InfluxDB repository..."
     
     # Add InfluxDB GPG key and repository
-    wget -q https://repos.influxdata.com/influxdata-archive_compat.key -O /tmp/influxdata-archive_compat.key
-    echo '393e8779c89ac8d958f81f942f9ad7fb82a25e133faddaf92e15b16e6ac9ce4c /tmp/influxdata-archive_compat.key' | sha256sum -c && cat /tmp/influxdata-archive_compat.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null
+    # Using the new method recommended by InfluxDB
+    print_info "Downloading and importing GPG key..."
     
-    echo 'deb [signed-by=/etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg] https://repos.influxdata.com/debian stable main' | sudo tee /etc/apt/sources.list.d/influxdata.list
+    # Download the key
+    if ! wget -q https://repos.influxdata.com/influxdata-archive_compat.key -O /tmp/influxdata-archive_compat.key; then
+        print_error "Failed to download InfluxDB GPG key"
+        exit 1
+    fi
+    
+    # Verify checksum
+    if ! echo '393e8779c89ac8d958f81f942f9ad7fb82a25e133faddaf92e15b16e6ac9ce4c /tmp/influxdata-archive_compat.key' | sha256sum -c -; then
+        print_error "GPG key checksum verification failed"
+        exit 1
+    fi
+    
+    # Import the key
+    if ! cat /tmp/influxdata-archive_compat.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null; then
+        print_error "Failed to import GPG key"
+        exit 1
+    fi
+    
+    # Add repository
+    echo 'deb [signed-by=/etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg] https://repos.influxdata.com/debian stable main' | sudo tee /etc/apt/sources.list.d/influxdata.list > /dev/null
     
     print_info "Updating package list..."
-    sudo apt-get update -qq
+    if ! sudo apt-get update 2>&1 | tee /tmp/apt_update.log; then
+        print_error "Failed to update package list"
+        cat /tmp/apt_update.log
+        exit 1
+    fi
     
     print_info "Installing InfluxDB 2.x (this may take a few minutes)..."
     if ! sudo apt-get install -y influxdb2; then
