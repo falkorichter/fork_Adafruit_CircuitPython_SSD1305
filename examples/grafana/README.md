@@ -94,9 +94,26 @@ After the automated setup completes:
    - Click "Save & Test"
 
 2. **Import Dashboard**
+   
+   Two dashboard options are available:
+   
+   **Option A: Simplified Dashboard (Recommended for first-time setup)**
+   - File: `dashboard_simple.json`
+   - Uses datasource selector (choose during import)
+   - Simple Flux queries that work with any field names
+   - Easy to customize per your data structure
+   - Best for troubleshooting and learning
+   
+   **Option B: Full-Featured Dashboard**
+   - File: `dashboard.json`
+   - Requires exact field names from telegraf.conf
+   - More polished visualizations
+   - Use after verifying data is flowing correctly
+   
+   **Import Steps:**
    - In Grafana: Dashboards → Import
-   - Upload `dashboard.json` from this directory
-   - Select your InfluxDB datasource
+   - Upload your chosen dashboard file
+   - Select your InfluxDB datasource when prompted
    - Click "Import"
 
 3. **Verify Data Flow**
@@ -110,16 +127,30 @@ After the automated setup completes:
 
 ## 📊 Dashboard Panels
 
-The included dashboard (`dashboard.json`) provides:
+Both dashboards provide 8 sensor visualization panels:
 
-1. **Temperature** - Real-time BME680 temperature (time series)
-2. **Air Quality Score** - Calculated 0-100 score with color thresholds (gauge)
-3. **Humidity** - BME680 relative humidity (time series)
+1. **Temperature (°C)** - Real-time BME680 temperature (time series)
+2. **Humidity (%)** - BME680 relative humidity (time series)
+3. **Air Quality Score** - Calculated 0-100 score with color thresholds (gauge)
 4. **Air Quality Over Time** - Historical air quality trends (time series)
-5. **Magnetic Field** - MMC5983 magnitude with baseline (time series)
-6. **Light Level** - VEML7700 lux readings (time series)
+5. **Light Level (Lux)** - VEML7700 light readings (time series)
+6. **Magnetic Field (µT)** - MMC5983 magnitude with baseline (time series)
 7. **Magnet Detection** - Real-time status (stat panel)
 8. **Person Detection** - STHS34PF80 presence status (stat panel)
+
+### Dashboard Differences
+
+**dashboard_simple.json** (Recommended for initial setup):
+- Uses `datasource: null` (select datasource during import)
+- Simpler Flux queries for easier customization
+- No measurement filters (works with any MQTT data structure)
+- Queries specific fields: `BME68x_TemperatureC`, `BME68x_Humidity`, `air_quality`, etc.
+
+**dashboard.json** (Full-featured):
+- Uses templated datasource variable `${DS_INFLUXDB}`
+- Includes measurement filters and aggregation windows
+- More sophisticated query patterns
+- Requires exact field names from telegraf.conf
 
 ## 🔧 Custom Processing
 
@@ -363,6 +394,51 @@ sudo journalctl -u influxdb -f
 curl http://localhost:8086/health
 # Should return: {"status":"pass"}
 ```
+
+### Dashboard shows "No Data" or empty panels
+
+If the dashboard displays but panels show "No Data":
+
+**1. Verify data is in InfluxDB:**
+```bash
+influx query 'from(bucket:"sensor_data") |> range(start: -1h) |> limit(n:10)'
+```
+
+If this returns data, the problem is with the dashboard queries.
+
+**2. Use the simplified dashboard:**
+
+The `dashboard_simple.json` is designed for easier troubleshooting:
+- Import `dashboard_simple.json` instead of `dashboard.json`
+- Select your InfluxDB datasource during import
+- Queries don't require specific measurement names
+- Field names match telegraf.conf output
+
+**3. Check field names in your data:**
+
+```bash
+# List all fields in your data
+influx query 'from(bucket:"sensor_data") |> range(start: -1h) |> keys() |> keep(columns: ["_field"]) |> distinct()'
+```
+
+**4. Update dashboard queries:**
+
+If field names don't match, edit each panel:
+- Click panel title → Edit
+- Modify the `filter` line to match your actual field names
+- Example: Change `r["_field"] == "BME68x_TemperatureC"` to match your field name
+
+**5. Common field name mismatches:**
+
+The queries expect these field names (set in telegraf.conf):
+- `BME68x_TemperatureC` - Temperature in Celsius
+- `BME68x_Humidity` - Humidity percentage  
+- `air_quality` - Air quality score (0-100)
+- `VEML7700_Lux` - Light level in lux
+- `mag_magnitude` - Magnetic field magnitude
+- `mag_baseline` - Magnetic field baseline
+- `magnet_detected` - Magnet detection flag (0/1)
+- `person_detected` - Person detection flag (0/1)
 
 ### After pulling code updates
 
