@@ -20,7 +20,6 @@ from typing import Set
 
 try:
     import websockets
-    from websockets.server import serve
 except ImportError:
     print("\n" + "=" * 60)
     print("ERROR: websockets library not installed")
@@ -151,7 +150,7 @@ class WebSocketTerminalServer:
     
     async def start_server(self) -> None:
         """Start the WebSocket server"""
-        async with serve(self.handler, self.host, self.port):
+        async with websockets.serve(self.handler, self.host, self.port):
             print(f"WebSocket server started on ws://{self.host}:{self.port}")
             print(f"Open the web UI in your browser to view the terminal output")
             print("Press Ctrl+C to stop the server")

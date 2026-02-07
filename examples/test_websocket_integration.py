@@ -38,7 +38,10 @@ async def test_websocket_server():
     # an actual MQTT broker running
     
     # Import the server class
-    from examples.websocket_terminal_server import WebSocketTerminalServer
+    # noqa: PLC0415 - Import inside function for conditional testing
+    from examples.websocket_terminal_server import (  # noqa: PLC0415
+        WebSocketTerminalServer,
+    )
     
     # Create server instance
     server = WebSocketTerminalServer(host="localhost", port=8766)
@@ -83,7 +86,10 @@ async def test_websocket_client_connection():
     print("Testing WebSocket Client Connection")
     print("=" * 60)
     
-    from examples.websocket_terminal_server import WebSocketTerminalServer
+    # noqa: PLC0415 - Import inside function for conditional testing
+    from examples.websocket_terminal_server import (  # noqa: PLC0415
+        WebSocketTerminalServer,
+    )
     
     # Create and start server
     server = WebSocketTerminalServer(host="localhost", port=8767)
