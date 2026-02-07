@@ -13,8 +13,10 @@ web clients via WebSocket, maintaining the terminal charm and formatting.
 import argparse
 import asyncio
 import json
+import os
 import sys
 import threading
+import traceback
 from pathlib import Path
 from typing import Set
 
@@ -41,20 +43,23 @@ from terminal_streamer import TerminalStreamer
 class WebSocketTerminalServer:
     """WebSocket server that broadcasts terminal output to connected clients"""
     
-    def __init__(self, host: str = "localhost", port: int = 8765):
+    def __init__(self, host: str = "localhost", port: int = 8765, debug: bool = False):
         """
         Initialize the WebSocket server.
         
         :param host: Host address to bind to
         :param port: Port to listen on
+        :param debug: Enable debug output
         """
         self.host = host
         self.port = port
+        self.debug = debug
         self.clients: Set[websockets.WebSocketServerProtocol] = set()
         self.streamer = TerminalStreamer()
         self.streamer.register_callback(self._broadcast_to_clients)
         self._broadcast_lock = asyncio.Lock()
         self.loop = None  # Will be set when server starts
+        self._broadcast_count = 0  # Track number of broadcasts
     
     def _broadcast_to_clients(self, text: str) -> None:
         """
@@ -64,7 +69,20 @@ class WebSocketTerminalServer:
         :param text: Text to broadcast
         """
         if not self.clients or not self.loop:
+            if self.debug and not self.clients:
+                print(f"[DEBUG] No clients connected, skipping broadcast")
+            elif self.debug and not self.loop:
+                print(f"[DEBUG] Event loop not set, skipping broadcast")
             return
+        
+        self._broadcast_count += 1
+        if self.debug:
+            print(
+                f"[DEBUG] Broadcasting #{self._broadcast_count}: "
+                f"{len(text)} chars to {len(self.clients)} client(s)"
+            )
+            if len(text) < 100:
+                print(f"[DEBUG] Content: {repr(text)}")
         
         # Create a message with the text
         message = json.dumps({
@@ -165,15 +183,27 @@ class WebSocketTerminalServer:
         """
         def run_with_capture():
             """Run the script with terminal capture"""
+            print(
+                f"[DEBUG] Starting sensor script: "
+                f"{script_func.__module__}.{script_func.__name__}"
+            )
+            print(f"[DEBUG] Capture enabled: {self.streamer is not None}")
+            
             self.streamer.start_capture()
             try:
+                print("[DEBUG] Running sensor script...")
                 script_func(*args, **kwargs)
+            except Exception as e:
+                print(f"[ERROR] Sensor script failed: {e}")
+                traceback.print_exc()
             finally:
+                print("[DEBUG] Stopping capture...")
                 self.streamer.stop_capture()
         
         # Run in a separate thread
         thread = threading.Thread(target=run_with_capture, daemon=True)
         thread.start()
+        print(f"[DEBUG] Sensor script thread started (daemon={thread.daemon})")
 
 
 async def main_async(args):
@@ -185,17 +215,34 @@ async def main_async(args):
         from examples import mqtt_sensor_example  # noqa: PLC0415
         script_main = mqtt_sensor_example.main
     elif args.script == "rich":
+        print("\n" + "=" * 70)
+        print("WARNING: Rich library compatibility issue with WebSocket streaming")
+        print("=" * 70)
+        print("The Rich library uses advanced terminal features (Live display,")
+        print("alternate screen buffer) that bypass standard stdout capture.")
+        print("This means Rich output may not stream properly to the browser.")
+        print("\nFor best WebSocket streaming experience, use: --script basic")
+        print("=" * 70 + "\n")
         from examples import mqtt_sensor_example_rich  # noqa: PLC0415
         script_main = mqtt_sensor_example_rich.main
     elif args.script == "textual":
-        print("Warning: Textual UI may not work well with WebSocket streaming")
-        print("Consider using 'basic' or 'rich' script types instead")
+        print("\n" + "=" * 70)
+        print("WARNING: Textual UI compatibility issue with WebSocket streaming")
+        print("=" * 70)
+        print("Textual uses alternate screen buffers and direct terminal access")
+        print("that cannot be captured via stdout redirection.")
+        print("\nFor best WebSocket streaming experience, use: --script basic")
+        print("=" * 70 + "\n")
         from examples import mqtt_sensor_example_textual  # noqa: PLC0415
         script_main = mqtt_sensor_example_textual.main
     else:
         raise ValueError(f"Unknown script type: {args.script}")
     
-    server = WebSocketTerminalServer(host=args.ws_host, port=args.ws_port)
+    server = WebSocketTerminalServer(
+        host=args.ws_host,
+        port=args.ws_port,
+        debug=args.debug
+    )
     server.run_sensor_script(script_main)
     
     # Start the WebSocket server
@@ -241,8 +288,18 @@ def main():
         default="iot_logger",
         help="MQTT topic to subscribe to (default: iot_logger)"
     )
+    parser.add_argument(
+        "--debug",
+        action="store_true",
+        help="Enable debug output for troubleshooting"
+    )
     
     args = parser.parse_args()
+    
+    # Enable debug mode if requested
+    if args.debug:
+        print("[DEBUG] Debug mode enabled")
+        os.environ['WEBSOCKET_DEBUG'] = '1'
     
     # Store MQTT args for the script to use
     # Note: This is a simple approach; a better architecture would pass these through
