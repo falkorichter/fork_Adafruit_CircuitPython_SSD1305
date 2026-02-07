@@ -153,6 +153,26 @@ def create_sensor_table_right(data, mqtt_sensor):
     
     table.add_row("", "")
     
+    # MMC5983 magnetometer
+    table.add_row("[bold magenta]Magnetometer[/bold magenta]", "")
+    table.add_row("  X-axis (MMC5983)", f"{data['mag_x']} Gauss")
+    table.add_row("  Y-axis (MMC5983)", f"{data['mag_y']} Gauss")
+    table.add_row("  Z-axis (MMC5983)", f"{data['mag_z']} Gauss")
+    table.add_row("  Magnitude", f"{data['mag_magnitude']} Gauss")
+    table.add_row("  Baseline", f"{data['mag_baseline']} Gauss")
+    table.add_row("  Temp (MMC5983)", f"{data['mag_temperature']} °C")
+    
+    # Magnet detection status
+    magnet_status = data.get('magnet_detected')
+    if magnet_status is None or magnet_status == 'n/a':
+        table.add_row("  Magnet Status", "[dim]UNKNOWN - No data[/dim]")
+    elif magnet_status:
+        table.add_row("  Magnet Status", "[bold red]🧲 MAGNET CLOSE 🧲[/bold red]")
+    else:
+        table.add_row("  Magnet Status", "[green]No magnet detected[/green]")
+    
+    table.add_row("", "")
+    
     # WiFi information
     table.add_row("[bold magenta]WiFi Information[/bold magenta]", "")
     table.add_row("  SSID", f"{data['ssid']}")
