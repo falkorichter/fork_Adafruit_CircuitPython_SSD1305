@@ -6,6 +6,49 @@ This document evaluates multiple architectural approaches for integrating the ex
 
 **Recommended Solution**: **Option 3 - Telegraf + InfluxDB + Grafana Stack** (Best balance of simplicity, features, and maintenance)
 
+## Background: What is Grafana?
+
+**Grafana is a visualization and analytics platform**, not a database. It's important to understand the roles of each component in the recommended stack:
+
+### Component Roles
+
+1. **Grafana** (Visualization Layer)
+   - **What it does**: Creates dashboards with charts, graphs, and alerts
+   - **What it doesn't do**: Store data (it only reads from databases)
+   - **Role**: Query data from databases and display it in beautiful, interactive dashboards
+   - **Key features**: Real-time dashboards, alerting, user management, dashboard sharing
+
+2. **InfluxDB** (Storage Layer)
+   - **What it does**: Stores time-series data with compression and indexing
+   - **Role**: Database that persists all sensor readings with timestamps
+   - **Key features**: Optimized for time-series data, retention policies, data aggregation
+
+3. **Telegraf** (Processing Layer)
+   - **What it does**: Collects data from MQTT and processes it before storage
+   - **Role**: Bridge between MQTT and InfluxDB, applies custom transformations
+   - **Key features**: MQTT consumer, Starlark scripting for custom logic
+
+### Data Flow Explained
+
+```
+MQTT Broker → Telegraf → InfluxDB → Grafana → Your Browser
+(messages)    (process)  (store)    (query)   (display)
+```
+
+**Step by step:**
+1. **MQTT Broker** receives sensor data from IoT devices (existing)
+2. **Telegraf** subscribes to MQTT, processes the data (air quality calc, magnet detection)
+3. **InfluxDB** stores the processed data as time-series (historical database)
+4. **Grafana** queries InfluxDB and displays dashboards in your browser
+5. **Your Browser** shows live-updating charts and graphs
+
+**Why we need all three:**
+- **Telegraf**: Applies your custom sensor logic (air quality, magnet detection)
+- **InfluxDB**: Stores historical data so you can view trends over time
+- **Grafana**: Provides the professional UI for visualization and alerts
+
+Without InfluxDB, Grafana would have nothing to visualize. Without Telegraf, we'd need custom code to process MQTT data. The three components work together as the "TIG Stack" - a proven, production-ready solution.
+
 ## Current Architecture
 
 ### Existing System Components
