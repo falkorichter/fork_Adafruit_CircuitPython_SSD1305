@@ -730,12 +730,35 @@ class TestMQTTPlugin(unittest.TestCase):
             plugin.sensor_instance = self.mock_client
             plugin.available = True
             plugin.message_received = False
-            
+
             data = plugin._read_sensor_data()
             # All values should be n/a
             self.assertEqual(data["temperature"], "n/a")
             self.assertEqual(data["light"], "n/a")
             self.assertEqual(data["temp_c"], "n/a")
+
+    def test_parse_sths34pf80_data(self):
+        """Test parsing STHS34PF80 data from MQTT message"""
+        with patch.dict("sys.modules", self.paho_patches):
+            from sensor_plugins import MQTTPlugin
+
+            plugin = MQTTPlugin()
+            plugin.sensor_instance = self.mock_client
+            plugin.available = True
+            plugin.message_received = True
+            # Test data matching the issue example
+            plugin.latest_message = {
+                "STHS34PF80": {
+                    "Presence (cm^-1)": 1377,
+                    "Motion (LSB)": 24,
+                    "Temperature (C)": 0,
+                }
+            }
+
+            data = plugin._read_sensor_data()
+            self.assertEqual(data["presence_value"], 1377)
+            self.assertEqual(data["motion_value"], 24)
+            self.assertEqual(data["sths34_temperature"], 0)
 
     def test_air_quality_calculation(self):
         """Test BME68x air quality calculation similar to BME680Plugin"""
