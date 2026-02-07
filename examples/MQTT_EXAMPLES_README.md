@@ -34,6 +34,23 @@ pip install textual
 python examples/mqtt_sensor_example_textual.py --host your-broker-ip
 ```
 
+### Option 4: WebSocket Streaming to Browser 🌐
+Stream terminal output to a web browser via WebSocket:
+
+```bash
+pip install websockets
+
+# Start the WebSocket server with simulated data (no MQTT broker required)
+python examples/demo_websocket_streaming.py
+
+# Or stream from real MQTT data
+python examples/websocket_terminal_server.py --script basic --mqtt-host your-broker-ip
+
+# Then open examples/websocket_terminal_viewer.html in your browser
+```
+
+See [WEBSOCKET_TERMINAL_STREAMING.md](../WEBSOCKET_TERMINAL_STREAMING.md) for detailed documentation.
+
 ### Install All Optional Dependencies
 ```bash
 pip install -r optional_requirements.txt
