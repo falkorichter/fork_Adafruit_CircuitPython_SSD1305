@@ -146,6 +146,23 @@ See `PERFORMANCE.md <PERFORMANCE.md>`_ for detailed performance information, ben
 * WebSocket push updates (~5ms latency vs 2000ms polling)
 * Automatic refresh rate optimization based on actual FPS
 
+Remote USB Numpad Integration
+-----------------------------
+
+If you need to integrate a USB numpad over WiFi, see `USB_NUMPAD_WIFI_INTEGRATION.md <USB_NUMPAD_WIFI_INTEGRATION.md>`_ for:
+
+* Architecture options (Raspberry Pi Zero W, ESP32-S3, commercial solutions)
+* Hardware recommendations with product links and datasheets
+* Architecture diagrams
+* Implementation examples compatible with the keyboard plugin
+
+A reference implementation for the Raspberry Pi Zero W client is provided:
+
+.. code-block:: shell
+
+    # On the remote Pi Zero W (connected to USB numpad)
+    python examples/numpad_wifi_client.py --server ws://192.168.1.100:8001
+
 Contributing
 ============
 
