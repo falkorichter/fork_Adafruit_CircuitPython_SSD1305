@@ -67,7 +67,14 @@ else
     fi
     
     print_info "Downloading InfluxDB package: $INFLUX_PKG"
-    wget -q "https://dl.influxdata.com/influxdb/releases/$INFLUX_PKG" -O /tmp/influxdb.deb
+    print_info "This may take a few minutes depending on your internet connection..."
+    
+    # Download with progress bar (remove -q for visibility)
+    if ! wget --show-progress --progress=bar:force "https://dl.influxdata.com/influxdb/releases/$INFLUX_PKG" -O /tmp/influxdb.deb 2>&1; then
+        print_error "Failed to download InfluxDB package"
+        print_error "Please check your internet connection and try again"
+        exit 1
+    fi
     
     print_info "Installing InfluxDB..."
     sudo dpkg -i /tmp/influxdb.deb || true
@@ -109,7 +116,14 @@ else
     fi
     
     print_info "Downloading Telegraf package: $TELEGRAF_PKG"
-    wget -q "https://dl.influxdata.com/telegraf/releases/$TELEGRAF_PKG" -O /tmp/telegraf.deb
+    print_info "This may take a few minutes depending on your internet connection..."
+    
+    # Download with progress bar (remove -q for visibility)
+    if ! wget --show-progress --progress=bar:force "https://dl.influxdata.com/telegraf/releases/$TELEGRAF_PKG" -O /tmp/telegraf.deb 2>&1; then
+        print_error "Failed to download Telegraf package"
+        print_error "Please check your internet connection and try again"
+        exit 1
+    fi
     
     print_info "Installing Telegraf..."
     sudo dpkg -i /tmp/telegraf.deb || true
