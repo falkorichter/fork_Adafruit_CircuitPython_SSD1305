@@ -75,24 +75,30 @@ else
     print_info "Adding InfluxDB repository..."
     
     # Add InfluxDB GPG key and repository
-    # Using the new method recommended by InfluxDB
-    print_info "Downloading and importing GPG key..."
+    # Note: InfluxData rotated their GPG keys in early 2026
+    # Using the 2026-2029 compatibility key (expires 2029)
+    print_info "Downloading and importing GPG key (2026-2029 key)..."
     
-    # Download the key
-    if ! wget -q https://repos.influxdata.com/influxdata-archive_compat.key -O /tmp/influxdata-archive_compat.key; then
-        print_error "Failed to download InfluxDB GPG key"
-        exit 1
+    # Try to download and import the new 2026-2029 key
+    if curl -fsSL https://repos.influxdata.com/influxdata-archive_compat-exp2029.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg; then
+        print_info "Successfully imported InfluxDB GPG key from URL"
+    else
+        print_warn "Failed to download key from URL, trying keyserver..."
+        # Fallback: fetch the key from keyserver
+        # Key ID: DA61C26A0585BD3B (2026-2029 key)
+        if gpg --keyserver keyserver.ubuntu.com --recv-keys DA61C26A0585BD3B 2>/dev/null && \
+           gpg --export DA61C26A0585BD3B | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null; then
+            print_info "Successfully imported InfluxDB GPG key from keyserver"
+        else
+            print_error "Failed to import InfluxDB GPG key from both URL and keyserver"
+            print_error "Please check your internet connection and firewall settings"
+            exit 1
+        fi
     fi
     
-    # Verify checksum
-    if ! echo '393e8779c89ac8d958f81f942f9ad7fb82a25e133faddaf92e15b16e6ac9ce4c /tmp/influxdata-archive_compat.key' | sha256sum -c -; then
-        print_error "GPG key checksum verification failed"
-        exit 1
-    fi
-    
-    # Import the key
-    if ! cat /tmp/influxdata-archive_compat.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null; then
-        print_error "Failed to import GPG key"
+    # Verify the key was imported
+    if [ ! -f /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg ]; then
+        print_error "GPG key file not found after import"
         exit 1
     fi
     

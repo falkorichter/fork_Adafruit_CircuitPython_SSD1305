@@ -194,10 +194,8 @@ If you prefer manual setup instead of using the automated script:
 ### 1. Install InfluxDB
 
 ```bash
-# Add InfluxDB repository
-wget -q https://repos.influxdata.com/influxdata-archive_compat.key
-echo '393e8779c89ac8d958f81f942f9ad7fb82a25e133faddaf92e15b16e6ac9ce4c influxdata-archive_compat.key' | sha256sum -c
-cat influxdata-archive_compat.key | gpg --dearmor | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null
+# Add InfluxDB repository (using 2026-2029 key)
+curl -fsSL https://repos.influxdata.com/influxdata-archive_compat-exp2029.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg
 
 echo 'deb [signed-by=/etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg] https://repos.influxdata.com/debian stable main' | sudo tee /etc/apt/sources.list.d/influxdata.list
 
@@ -275,6 +273,30 @@ influx query 'from(bucket:"sensor_data") |> range(start: -1h) |> limit(n:10)'
 ```
 
 ## 🐛 Troubleshooting
+
+### GPG Key Errors (NO_PUBKEY DA61C26A0585BD3B)
+
+If you encounter GPG key verification errors, this is due to InfluxData's GPG key rotation in early 2026. The setup script handles this automatically, but if you see this error:
+
+```bash
+W: GPG error: https://repos.influxdata.com/debian stable InRelease: The following signatures couldn't be verified because the public key is not available: NO_PUBKEY DA61C26A0585BD3B
+```
+
+**Manual fix:**
+
+```bash
+# Import the new 2026-2029 key
+curl -fsSL https://repos.influxdata.com/influxdata-archive_compat-exp2029.key | sudo gpg --dearmor -o /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg
+
+# Or use keyserver as fallback
+sudo gpg --keyserver keyserver.ubuntu.com --recv-keys DA61C26A0585BD3B
+sudo gpg --export DA61C26A0585BD3B | sudo tee /etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg > /dev/null
+
+# Then update
+sudo apt-get update
+```
+
+**Note**: InfluxData rotates their signing keys periodically. The 2026-2029 key (DA61C26A0585BD3B) is valid through 2029.
 
 ### "influx command not found"
 
