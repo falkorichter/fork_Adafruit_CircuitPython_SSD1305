@@ -97,6 +97,7 @@ class SensorDisplay(Static):
         # Temperature sensor
         lines.append("[bold magenta]Temperature Sensor[/bold magenta]")
         lines.append(f"  TMP117:         {data['temp_c']} °C")
+        lines.append("")
         
         self.update("\n".join(lines))
 
@@ -145,8 +146,8 @@ class SystemDisplay(Static):
         if self.mqtt_sensor.available:
             lines.append("[bold green]Status: Connected ✓[/bold green]")
         else:
-            lines.append("[bold red]Status: Disconnected[/bold red]")
-            lines.append("[dim](waiting for broker...)[/dim]")
+            lines.append("[bold red]Status: Disconnected (waiting for broker...)[/bold red]")
+        lines.append("")
         
         self.update("\n".join(lines))
 
