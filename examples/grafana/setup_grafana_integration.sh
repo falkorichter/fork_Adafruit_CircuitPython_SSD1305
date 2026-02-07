@@ -59,6 +59,16 @@ print_info "Installing InfluxDB 2.x..."
 INFLUX_ALREADY_SETUP=false
 
 if command -v influxd &> /dev/null; then
+    # Check if this is InfluxDB 1.x or 2.x
+    if [ -f /etc/influxdb/influxdb.conf ]; then
+        print_error "InfluxDB 1.x detected (config at /etc/influxdb/influxdb.conf)"
+        print_error "This script requires InfluxDB 2.x. Please uninstall InfluxDB 1.x first:"
+        print_error "  sudo apt-get remove influxdb"
+        print_error "  sudo rm -rf /etc/influxdb"
+        print_error "Then run this script again."
+        exit 1
+    fi
+    
     print_warn "InfluxDB is already installed. Skipping installation."
     INFLUX_ALREADY_SETUP=true
 else
@@ -73,7 +83,7 @@ else
     print_info "Updating package list..."
     sudo apt-get update -qq
     
-    print_info "Installing InfluxDB (this may take a few minutes)..."
+    print_info "Installing InfluxDB 2.x (this may take a few minutes)..."
     if ! sudo apt-get install -y influxdb2; then
         print_error "Failed to install InfluxDB"
         print_error "Please check your internet connection and try again"
@@ -89,6 +99,26 @@ else
     sleep 10
     
     print_info "InfluxDB installed successfully!"
+fi
+
+# Install InfluxDB CLI tools if not present
+if ! command -v influx &> /dev/null; then
+    print_info "Installing InfluxDB CLI tools..."
+    
+    # Repository should already be added from above
+    if ! sudo apt-get install -y influxdb2-cli; then
+        print_error "Failed to install InfluxDB CLI tools"
+        print_error "Trying to continue anyway..."
+    else
+        print_info "InfluxDB CLI tools installed successfully!"
+    fi
+fi
+
+# Verify we have the influx command
+if ! command -v influx &> /dev/null; then
+    print_error "The 'influx' CLI command is not available"
+    print_error "Please install it manually: sudo apt-get install influxdb2-cli"
+    exit 1
 fi
 
 # =============================================================================

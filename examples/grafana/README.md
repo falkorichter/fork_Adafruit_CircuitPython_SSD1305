@@ -40,10 +40,14 @@ chmod +x setup_grafana_integration.sh
 ```
 
 The script will:
-1. Install InfluxDB 2.x
-2. Install Telegraf
-3. Configure Telegraf with MQTT consumer and custom processing
-4. Start all services
+1. Add InfluxDB repository
+2. Install InfluxDB 2.x server and CLI tools
+3. Automatically configure InfluxDB (organization, bucket, credentials)
+4. Install Telegraf
+5. Configure Telegraf with MQTT consumer and custom processing
+6. Start all services
+
+**Important**: If you have InfluxDB 1.x installed, the script will detect it and ask you to uninstall it first, as this integration requires InfluxDB 2.x.
 
 **Time required**: ~10-15 minutes (fully automated, no manual steps)
 
@@ -199,7 +203,7 @@ echo 'deb [signed-by=/etc/apt/trusted.gpg.d/influxdata-archive_compat.gpg] https
 
 # Install InfluxDB
 sudo apt-get update
-sudo apt-get install -y influxdb2
+sudo apt-get install -y influxdb2 influxdb2-cli
 
 # Start service
 sudo systemctl enable influxdb
@@ -212,7 +216,7 @@ sudo systemctl start influxdb
 # Generate a secure password
 INFLUX_PASSWORD=$(openssl rand -base64 32 | tr -d "=+/" | cut -c1-25)
 
-# Automated setup
+# Automated setup using influx CLI
 influx setup \
   --username admin \
   --password "$INFLUX_PASSWORD" \
@@ -227,6 +231,8 @@ INFLUX_TOKEN=$(influx auth list --json | grep -o '"token":"[^"]*"' | head -1 | c
 echo "Token: $INFLUX_TOKEN"
 echo "Password: $INFLUX_PASSWORD"
 ```
+
+**Note**: The `influx` CLI command is provided by the `influxdb2-cli` package.
 
 ### 3. Install Telegraf
 
@@ -269,6 +275,31 @@ influx query 'from(bucket:"sensor_data") |> range(start: -1h) |> limit(n:10)'
 ```
 
 ## 🐛 Troubleshooting
+
+### "influx command not found"
+
+If you see this error, install the InfluxDB CLI tools:
+
+```bash
+sudo apt-get install influxdb2-cli
+```
+
+### InfluxDB 1.x detected
+
+If the script detects InfluxDB 1.x (config at `/etc/influxdb/influxdb.conf`), you need to uninstall it first:
+
+```bash
+# Stop and remove InfluxDB 1.x
+sudo systemctl stop influxdb
+sudo apt-get remove influxdb
+sudo rm -rf /etc/influxdb /var/lib/influxdb
+
+# Then run the setup script again
+cd examples/grafana
+./setup_grafana_integration.sh
+```
+
+**Note**: InfluxDB 1.x and 2.x are not compatible. This integration requires InfluxDB 2.x for the CLI-based automated setup and Flux query language support.
 
 ### No data in Grafana
 
