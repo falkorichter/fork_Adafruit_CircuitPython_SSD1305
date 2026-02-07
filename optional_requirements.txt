@@ -8,3 +8,7 @@ evdev  # Linux-specific keyboard monitoring (works in headless environments)
 
 # Optional dependency for MQTT virtual sensor:
 paho-mqtt  # MQTT client library for IoT sensor data streaming
+
+# Optional dependencies for enhanced terminal UI (MQTT examples):
+rich  # Rich text and beautiful formatting for terminal displays
+textual  # Modern Python framework for building sophisticated terminal UIs
