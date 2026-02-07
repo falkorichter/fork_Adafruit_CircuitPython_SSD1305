@@ -146,6 +146,25 @@ class SystemDisplay(Static):
         lines.append(f"  State of Charge: {data['soc']} %")
         lines.append("")
         
+        # MMC5983 magnetometer
+        lines.append("[bold magenta]Magnetometer[/bold magenta]")
+        lines.append(f"  X-axis:         {data['mag_x']} Gauss")
+        lines.append(f"  Y-axis:         {data['mag_y']} Gauss")
+        lines.append(f"  Z-axis:         {data['mag_z']} Gauss")
+        lines.append(f"  Magnitude:      {data['mag_magnitude']} Gauss")
+        lines.append(f"  Baseline:       {data['mag_baseline']} Gauss")
+        lines.append(f"  Temp (MMC5983): {data['mag_temperature']} °C")
+        
+        # Magnet detection status
+        magnet_status = data.get('magnet_detected')
+        if magnet_status is None or magnet_status == 'n/a':
+            lines.append(f"  Magnet Status:  [dim]UNKNOWN - No data[/dim]")
+        elif magnet_status:
+            lines.append(f"  Magnet Status:  [bold red]🧲 MAGNET CLOSE 🧲[/bold red]")
+        else:
+            lines.append(f"  Magnet Status:  [green]No magnet detected[/green]")
+        lines.append("")
+        
         # WiFi information
         lines.append("[bold magenta]WiFi Information[/bold magenta]")
         lines.append(f"  SSID:           {data['ssid']}")
