@@ -232,6 +232,31 @@ python examples/websocket_terminal_server.py
 
 The basic ANSI terminal output works best with WebSocket streaming. Rich and Textual libraries use advanced terminal features that may not translate well to HTML. Use `--script basic` for the best web viewing experience.
 
+## End-to-End Testing
+
+An automated end-to-end test with Playwright is available to verify the WebSocket streaming functionality:
+
+```bash
+# Install Playwright (one-time setup)
+pip install playwright
+playwright install chromium
+
+# Run the E2E test
+python examples/test_websocket_e2e_playwright.py
+```
+
+The test will:
+1. Start the WebSocket demo server
+2. Open the HTML viewer in a headless browser
+3. Verify WebSocket connection and data streaming
+4. Capture screenshots showing the streaming terminal output
+5. Save screenshots to the `screenshots/` directory
+
+This is useful for:
+- Verifying the complete stack works end-to-end
+- Generating screenshots for documentation
+- Automated testing in CI/CD pipelines
+
 ## Future Enhancements
 
 Possible improvements to this architecture:
