@@ -132,6 +132,23 @@ def main():
             else:
                 print(f"Person Status:  No person detected (Presence < 1000 AND Motion = 0)")
             
+            # MMC5983 magnetometer data
+            print(f"\nMag X-axis:     {data['mag_x']} Gauss (MMC5983)")
+            print(f"Mag Y-axis:     {data['mag_y']} Gauss (MMC5983)")
+            print(f"Mag Z-axis:     {data['mag_z']} Gauss (MMC5983)")
+            print(f"Mag Magnitude:  {data['mag_magnitude']} Gauss (MMC5983)")
+            print(f"Mag Baseline:   {data['mag_baseline']} Gauss (MMC5983)")
+            print(f"Mag Temp:       {data['mag_temperature']} °C (MMC5983)")
+            
+            # Display magnet detection status
+            magnet_status = data.get('magnet_detected', 'n/a')
+            if magnet_status == "n/a":
+                print(f"Magnet Status:  UNKNOWN - No MMC5983 data available")
+            elif magnet_status:
+                print(f"Magnet Status:  *** MAGNET CLOSE *** (Magnitude > 2x baseline)")
+            else:
+                print(f"Magnet Status:  No magnet detected (normal field strength)")
+            
             print(f"\nBattery Voltage: {data['voltage']} V")
             print(f"Battery SOC:     {data['soc']} %")
             print(f"\nWiFi SSID:      {data['ssid']}")
