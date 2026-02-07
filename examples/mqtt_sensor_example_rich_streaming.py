@@ -97,7 +97,16 @@ def create_sensor_table_left(data, mqtt_sensor):
     table.add_row("  Humidity", f"{data['humidity']} %")
     table.add_row("  Pressure", f"{data['pressure']} Pa")
     table.add_row("  Gas Resistance", f"{data['gas_resistance']} Ω")
-    table.add_row("  Air Quality", data['air_quality'])
+    
+    # Air quality - handle burn-in period and numeric values
+    if data.get("burn_in_remaining") is not None:
+        burn_in_msg = f"[yellow]Burn-in ({data['burn_in_remaining']}s remaining)[/yellow]"
+        table.add_row("  Air Quality", burn_in_msg)
+    elif data['air_quality'] == "n/a":
+        table.add_row("  Air Quality", str(data['air_quality']))
+    else:
+        # Format numeric air quality value
+        table.add_row("  Air Quality", f"{data['air_quality']:.1f}")
     
     table.add_row("", "")
     
@@ -109,20 +118,22 @@ def create_sensor_table_left(data, mqtt_sensor):
     
     # Temperature sensor (TMP117)
     table.add_row("[bold magenta]Precision Temp (TMP117)[/bold magenta]", "")
-    table.add_row("  Temperature", f"{data['tmp117_temp']} °C")
+    table.add_row("  Temperature", f"{data['temp_c']} °C")
     
     table.add_row("", "")
     
     # Human presence sensor (STHS34PF80)
     table.add_row("[bold magenta]Presence (STHS34PF80)[/bold magenta]", "")
-    table.add_row("  Presence", f"{data['presence']} cm⁻¹")
-    table.add_row("  Motion", f"{data['motion']} LSB")
-    table.add_row("  Object Temp", f"{data['object_temp']} °C")
+    table.add_row("  Presence", f"{data['presence_value']} cm⁻¹")
+    table.add_row("  Motion", f"{data['motion_value']} LSB")
+    table.add_row("  Object Temp", f"{data['sths34_temperature']} °C")
     
     # Person detection status with color coding
-    person_status = mqtt_sensor._calculate_person_status(data)
-    if "DETECTED" in person_status:
-        table.add_row("  Person Status", f"[red bold]{person_status}[/red bold]")
+    person_status = data.get('person_detected')
+    if person_status is None or person_status == 'n/a':
+        table.add_row("  Person Status", "[dim]UNKNOWN - No data[/dim]")
+    elif person_status:
+        table.add_row("  Person Status", "[red bold]*** DETECTED ***[/red bold]")
     else:
         table.add_row("  Person Status", "[green]Not detected[/green]")
     
