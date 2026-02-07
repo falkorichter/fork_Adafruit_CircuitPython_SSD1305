@@ -20,8 +20,12 @@ parses JSON sensor data including:
 
 The sensor is hot-pluggable - it will automatically detect when the
 MQTT broker becomes available or unavailable.
+
+The terminal display clears and redraws with each update using ANSI escape
+codes, providing a clean interface similar to top/htop that doesn't scroll.
 """
 
+import argparse
 import sys
 import time
 from pathlib import Path
@@ -34,46 +38,68 @@ from sensor_plugins import MQTTPlugin
 
 def main():
     """Main function to demonstrate MQTT plugin"""
-    print("MQTT Virtual Sensor Plugin Example")
-    print("=" * 50)
+    # Parse command-line arguments
+    parser = argparse.ArgumentParser(
+        description="MQTT Virtual Sensor Plugin Example with ANSI terminal display"
+    )
+    parser.add_argument(
+        "--host",
+        default="localhost",
+        help="MQTT broker hostname or IP address (default: localhost)"
+    )
+    parser.add_argument(
+        "--port",
+        type=int,
+        default=1883,
+        help="MQTT broker port (default: 1883)"
+    )
+    parser.add_argument(
+        "--topic",
+        default="iot_logger",
+        help="MQTT topic to subscribe to (default: iot_logger)"
+    )
+    args = parser.parse_args()
     
     # Create MQTT plugin instance
-    # Adjust broker_host and topic as needed
     mqtt_sensor = MQTTPlugin(
-        broker_host="localhost",  # Change to your MQTT broker
-        broker_port=1883,
-        topic="iot_logger",  # Change to your topic
+        broker_host=args.host,
+        broker_port=args.port,
+        topic=args.topic,
         check_interval=5.0,
         burn_in_time=60,  # Reduced from 300s for example
     )
     
-    print(f"Connecting to MQTT broker at {mqtt_sensor.broker_host}:{mqtt_sensor.broker_port}")
-    print(f"Subscribing to topic: {mqtt_sensor.topic}")
-    print("\nExample JSON payload format:")
-    print("""{
-    "System Info": {"SSID": "MyWiFi", "RSSI": 198},
-    "VEML7700": {"Lux": 50.688},
-    "MAX17048": {"Voltage (V)": 4.21, "State Of Charge (%)": 108.89},
-    "TMP117": {"Temperature (C)": 22.375},
-    "STHS34PF80": {"Presence (cm^-1)": 1377, "Motion (LSB)": 24, "Temperature (C)": 0},
-    "BME68x": {
-        "Humidity": 36.19836,
-        "TemperatureC": 22.40555,
-        "Pressure": 99244.27,
-        "Gas Resistance": 29463.11
-    }
-}""")
-    print("\n" + "=" * 50)
-    print("Reading sensor data (Ctrl+C to exit)...")
-    print()
+    # ANSI escape codes for terminal control
+    CLEAR_SCREEN = "\033[2J"  # Clear entire screen
+    HOME_CURSOR = "\033[H"    # Move cursor to home (top-left)
+    
+    def print_header():
+        """Print the static header information"""
+        print("MQTT Virtual Sensor Plugin Example")
+        print("=" * 50)
+        print(f"Connecting to MQTT broker at {mqtt_sensor.broker_host}:{mqtt_sensor.broker_port}")
+        print(f"Subscribing to topic: {mqtt_sensor.topic}")
+        print("\n" + "=" * 50)
+        print("Reading sensor data (Ctrl+C to exit)...")
+        print()
+    
+    # Print initial header
+    print_header()
     
     try:
+        first_iteration = True
         while True:
             # Read sensor data
             data = mqtt_sensor.read()
             
+            # Clear screen and redraw header (skip on first iteration to avoid double print)
+            if not first_iteration:
+                print(CLEAR_SCREEN + HOME_CURSOR, end="", flush=True)
+                print_header()
+            first_iteration = False
+            
             # Display the data
-            print(f"\nTimestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
+            print(f"Timestamp: {time.strftime('%Y-%m-%d %H:%M:%S')}")
             print("-" * 50)
             
             # BME68x environmental data - always show raw values
