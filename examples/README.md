@@ -17,6 +17,24 @@ This will install all necessary packages including:
 
 Alternatively, you can install dependencies individually as needed for specific examples.
 
+## 📊 Grafana Integration
+
+For professional data visualization and monitoring, see the **Grafana integration** in `examples/grafana/`:
+
+```bash
+cd examples/grafana
+./setup_grafana_integration.sh
+```
+
+Features:
+- ✅ Historical sensor data storage (InfluxDB)
+- ✅ Professional dashboards with Grafana
+- ✅ Custom air quality and magnet detection algorithms
+- ✅ Alerting and notifications
+- ✅ Production-ready for Raspberry Pi
+
+See `examples/grafana/README.md` for detailed setup instructions and `GRAFANA_INTEGRATION_STRATEGY.md` for architecture analysis.
+
 ## Examples Overview
 
 ### ssd1305_simpletest.py
