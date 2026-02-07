@@ -32,8 +32,8 @@ except ImportError:
     print("=" * 60 + "\n")
     sys.exit(1)
 
-# Add parent directory to path for imports
-sys.path.insert(0, str(Path(__file__).parent))
+# Add repository root to path for imports
+sys.path.insert(0, str(Path(__file__).parent.parent))
 
 from terminal_streamer import TerminalStreamer
 
