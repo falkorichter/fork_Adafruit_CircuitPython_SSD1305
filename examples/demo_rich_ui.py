@@ -5,13 +5,26 @@ This simulates sensor data to show how the UI looks.
 """
 
 import random
+import sys
 import time
 
-from rich.console import Console
-from rich.layout import Layout
-from rich.live import Live
-from rich.panel import Panel
-from rich.table import Table
+try:
+    from rich.console import Console
+    from rich.layout import Layout
+    from rich.live import Live
+    from rich.panel import Panel
+    from rich.table import Table
+except ImportError:
+    print("\n" + "=" * 60)
+    print("ERROR: Rich library not installed")
+    print("=" * 60)
+    print("\nThis demo requires the Rich library for terminal UI.")
+    print("\nTo install Rich, run:")
+    print("    pip install rich")
+    print("\nOr install all optional dependencies:")
+    print("    pip install -r optional_requirements.txt")
+    print("=" * 60 + "\n")
+    sys.exit(1)
 
 
 def create_demo_data(counter):

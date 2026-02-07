@@ -2,6 +2,38 @@
 
 This directory contains multiple implementations of the MQTT sensor monitor example, each using different terminal display methods.
 
+## Quick Start
+
+### Option 1: Basic Version (No Dependencies)
+```bash
+python examples/mqtt_sensor_example.py
+```
+
+### Option 2: Rich UI Version (Recommended) ⭐
+```bash
+pip install rich
+python examples/mqtt_sensor_example_rich.py
+```
+
+Or try the demo without an MQTT broker:
+```bash
+pip install rich
+python examples/demo_rich_ui.py
+```
+
+### Option 3: Textual TUI Version
+```bash
+pip install textual
+python examples/mqtt_sensor_example_textual.py
+```
+
+### Install All Optional Dependencies
+```bash
+pip install -r optional_requirements.txt
+```
+
+---
+
 ## Available Versions
 
 ### 1. `mqtt_sensor_example.py` (Basic ANSI)

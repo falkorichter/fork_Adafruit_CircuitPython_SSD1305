@@ -30,8 +30,16 @@ try:
     from rich.table import Table
     from rich.text import Text
 except ImportError:
-    print("Error: Rich library not installed.")
-    print("Please install it with: pip install rich")
+    print("\n" + "=" * 60)
+    print("ERROR: Rich library not installed")
+    print("=" * 60)
+    print("\nThis example requires the Rich library for terminal UI.")
+    print("\nTo install Rich, run:")
+    print("    pip install rich")
+    print("\nOr install all optional dependencies:")
+    print("    pip install -r optional_requirements.txt")
+    print("\nFor more information, see examples/MQTT_EXAMPLES_README.md")
+    print("=" * 60 + "\n")
     sys.exit(1)
 
 

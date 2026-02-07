@@ -28,8 +28,16 @@ try:
     from textual.reactive import reactive
     from textual.widgets import DataTable, Footer, Header, Static
 except ImportError:
-    print("Error: Textual library not installed.")
-    print("Please install it with: pip install textual")
+    print("\n" + "=" * 60)
+    print("ERROR: Textual library not installed")
+    print("=" * 60)
+    print("\nThis example requires the Textual framework for terminal UI.")
+    print("\nTo install Textual, run:")
+    print("    pip install textual")
+    print("\nOr install all optional dependencies:")
+    print("    pip install -r optional_requirements.txt")
+    print("\nFor more information, see examples/MQTT_EXAMPLES_README.md")
+    print("=" * 60 + "\n")
     sys.exit(1)
 
 
