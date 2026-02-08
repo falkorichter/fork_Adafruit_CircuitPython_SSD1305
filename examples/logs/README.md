@@ -21,15 +21,19 @@ To load the built-in log files, serve this folder with a local HTTP server:
 
 ```bash
 cd examples/logs
-python3 -m http.server 8000
+python3 serve.py
 # Open http://localhost:8000/visualizer.html
 ```
+
+The included `serve.py` also provides a **CORS proxy** so the visualizer can download files directly from the DataLogger device (which doesn't send `Access-Control-Allow-Origin` headers). If you use `python3 -m http.server` instead, downloads from the DataLogger will be blocked by the browser's CORS policy.
 
 You can also drag-and-drop or upload any CSV/TXT file from the SparkFun DataLogger.
 
 ### Download from DataLogger
 
 The visualizer can connect directly to a SparkFun DataLogger on your network to browse and download log files. Expand the "📡 Download from DataLogger" panel, enter the logger URL (e.g., `http://datalogger5b7a0.local`), and click **Connect**. Select which files to download and click **Download & Visualize Selected**.
+
+> **Note:** The DataLogger does not send CORS headers, so file downloads require the CORS proxy provided by `serve.py`. The visualizer auto-detects whether the proxy is available and shows a warning if it isn't.
 
 ## Grafana Import
 

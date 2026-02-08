@@ -1027,6 +1027,34 @@
     var loggerAllPages = [];
     var loggerCurrentPage = 0;
     var loggerExpectingMore = false;
+    var useProxy = false;
+
+    // Check if the CORS proxy (serve.py) is available
+    async function detectProxy() {
+        try {
+            var resp = await fetch('/proxy/http://localhost/', { method: 'HEAD' });
+            // Any response from /proxy/ means serve.py is running
+            useProxy = true;
+        } catch (e) {
+            try {
+                // Also try a GET that returns quickly
+                var resp2 = await fetch('/proxy/');
+                useProxy = true;
+            } catch (e2) {
+                useProxy = false;
+            }
+        }
+    }
+    detectProxy();
+
+    /** Build download URL, routing through CORS proxy when available. */
+    function loggerDownloadUrl(baseUrl, filename) {
+        var directUrl = baseUrl + '/dl/' + encodeURIComponent(filename);
+        if (useProxy) {
+            return '/proxy/' + directUrl;
+        }
+        return directUrl;
+    }
 
     function loggerSetStatus(msg, type) {
         var el = document.getElementById('logger-status');
@@ -1110,7 +1138,8 @@
     function loggerRenderFileList() {
         var container = document.getElementById('logger-file-list');
         container.innerHTML = '';
-        loggerSetStatus('Found ' + loggerFiles.length + ' file(s). Select files to download:', 'success');
+        var proxyNote = useProxy ? ' (via CORS proxy)' : ' ⚠️ Use python3 serve.py for CORS proxy if downloads fail';
+        loggerSetStatus('Found ' + loggerFiles.length + ' file(s). Select files to download:' + proxyNote, 'success');
         document.getElementById('logger-actions').style.display = 'flex';
 
         // Filter to only show .txt and .csv files (log files)
@@ -1183,7 +1212,7 @@
             var fname = filenames[i];
             dlStatus.textContent = 'Downloading ' + (i + 1) + '/' + filenames.length + ': ' + fname;
             try {
-                var resp = await fetch(baseUrl + '/dl/' + encodeURIComponent(fname));
+                var resp = await fetch(loggerDownloadUrl(baseUrl, fname));
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 var text = await resp.text();
                 var data = parseCSV(text);
@@ -1192,7 +1221,8 @@
                     filesData.push({ headers: enriched.headers, rows: enriched.rows, filename: fname });
                 }
             } catch (e) {
-                dlStatus.textContent = 'Error downloading ' + fname + ': ' + e.message;
+                var hint = useProxy ? '' : ' (try: python3 serve.py for CORS proxy)';
+                dlStatus.textContent = 'Error downloading ' + fname + ': ' + e.message + hint;
             }
         }
 
