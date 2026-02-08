@@ -1028,24 +1028,21 @@
     var loggerCurrentPage = 0;
     var loggerExpectingMore = false;
     var useProxy = false;
+    var proxyReady = false;
 
-    // Check if the CORS proxy (serve.py) is available
-    async function detectProxy() {
+    // Check if the CORS proxy (serve.py) is available.
+    // The /proxy/ path only exists when serve.py is serving; a plain
+    // python3 -m http.server returns 404 for it.
+    var proxyDetection = (async function detectProxy() {
         try {
             var resp = await fetch('/proxy/http://localhost/', { method: 'HEAD' });
-            // Any response from /proxy/ means serve.py is running
+            // serve.py responded (any status means the proxy route exists)
             useProxy = true;
         } catch (e) {
-            try {
-                // Also try a GET that returns quickly
-                var resp2 = await fetch('/proxy/');
-                useProxy = true;
-            } catch (e2) {
-                useProxy = false;
-            }
+            useProxy = false;
         }
-    }
-    detectProxy();
+        proxyReady = true;
+    })();
 
     /** Build download URL, routing through CORS proxy when available. */
     function loggerDownloadUrl(baseUrl, filename) {
@@ -1135,7 +1132,8 @@
         };
     }
 
-    function loggerRenderFileList() {
+    async function loggerRenderFileList() {
+        await proxyDetection;
         var container = document.getElementById('logger-file-list');
         container.innerHTML = '';
         var proxyNote = useProxy ? ' (via CORS proxy)' : ' ⚠️ Use python3 serve.py for CORS proxy if downloads fail';
@@ -1193,6 +1191,9 @@
     }
 
     async function loggerDownloadSelected() {
+        // Ensure proxy detection has finished before downloading
+        await proxyDetection;
+
         var checkboxes = document.querySelectorAll('#logger-file-list input[type="checkbox"]:checked');
         if (checkboxes.length === 0) {
             loggerSetStatus('No files selected.', 'error');
