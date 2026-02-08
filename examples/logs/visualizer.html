@@ -1031,13 +1031,12 @@
     var proxyReady = false;
 
     // Check if the CORS proxy (serve.py) is available.
-    // The /proxy/ path only exists when serve.py is serving; a plain
+    // Only serve.py provides the /proxy-check endpoint; a plain
     // python3 -m http.server returns 404 for it.
     var proxyDetection = (async function detectProxy() {
         try {
-            var resp = await fetch('/proxy/http://localhost/', { method: 'HEAD' });
-            // serve.py responded (any status means the proxy route exists)
-            useProxy = true;
+            var resp = await fetch('/proxy-check');
+            useProxy = resp.ok;
         } catch (e) {
             useProxy = false;
         }
@@ -1048,7 +1047,7 @@
     function loggerDownloadUrl(baseUrl, filename) {
         var directUrl = baseUrl + '/dl/' + encodeURIComponent(filename);
         if (useProxy) {
-            return '/proxy/' + directUrl;
+            return '/proxy?url=' + encodeURIComponent(directUrl);
         }
         return directUrl;
     }

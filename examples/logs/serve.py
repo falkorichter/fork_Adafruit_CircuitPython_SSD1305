@@ -35,20 +35,46 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
         self.send_response(200)
         self.end_headers()
 
-    def do_GET(self):
-        """Serve local files or proxy /proxy/<url> to the DataLogger."""
-        if self.path.startswith("/proxy/"):
+    def _route_request(self):
+        """Route to proxy-check, proxy, or file serving. Returns True if handled."""
+        if self.path == "/proxy-check":
+            self.send_response(200)
+            self.send_header("Content-Type", "text/plain")
+            self.end_headers()
+            self.wfile.write(b"ok")
+            return True
+        if self.path.startswith("/proxy"):
             self._handle_proxy()
-        else:
+            return True
+        return False
+
+    def do_GET(self):
+        """Serve local files or proxy requests to the DataLogger."""
+        if not self._route_request():
             super().do_GET()
+
+    def do_HEAD(self):
+        """Handle HEAD for proxy routes, delegate others to file server."""
+        if not self._route_request():
+            super().do_HEAD()
 
     def _handle_proxy(self):
         """Forward request to the DataLogger and return the response.
 
+        Supports two URL formats:
+        - /proxy?url=<encoded-url>  (preferred, avoids path ambiguity)
+        - /proxy/<url>              (legacy)
+
         Only allows proxying to .local mDNS hostnames and private/link-local
         IP ranges to prevent misuse as an open relay.
         """
-        target_url = urllib.parse.unquote(self.path[len("/proxy/"):])
+        parsed_path = urllib.parse.urlparse(self.path)
+        params = urllib.parse.parse_qs(parsed_path.query)
+
+        if "url" in params:
+            target_url = params["url"][0]
+        else:
+            target_url = urllib.parse.unquote(self.path[len("/proxy/"):])
 
         if not target_url.startswith("http://") and not target_url.startswith("https://"):
             target_url = "http://" + target_url
@@ -93,7 +119,7 @@ class CORSProxyHandler(http.server.SimpleHTTPRequestHandler):
 
     def log_message(self, format, *args):
         """Log with color for proxy requests."""
-        if self.path.startswith("/proxy/"):
+        if self.path.startswith("/proxy"):
             print(f"  \033[36m[proxy]\033[0m {format % args}")
         else:
             super().log_message(format, *args)
