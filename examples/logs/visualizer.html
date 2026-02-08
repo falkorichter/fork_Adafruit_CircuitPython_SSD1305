@@ -147,11 +147,12 @@
         '#ff6b6b', '#c0c0c0'
     ];
 
-    // Extended colors for multi-file view (one color per file)
+    // Extended colors for multi-file view
     const FILE_COLORS = [
         '#e94560', '#53d8fb', '#f5a623', '#7ed321',
         '#bd10e0', '#50e3c2', '#ff6b6b', '#4a90d9'
     ];
+    const GAP_MARKER = '__gap__';
 
     // === State ===
     let charts = {};
@@ -458,7 +459,7 @@
         for (const { rows, filename } of filesData) {
             if (allRows.length > 0) {
                 // Insert a null gap row to visually separate files
-                const gap = { _source: '__gap__' };
+                const gap = { _source: GAP_MARKER };
                 allHeaders.forEach(h => gap[h] = null);
                 allRows.push(gap);
             }
@@ -497,7 +498,7 @@
     // === Render combined stats ===
     function renderCombinedStats(merged) {
         const bar = document.getElementById('stats-bar');
-        const realRows = merged.rows.filter(r => r._source !== '__gap__');
+        const realRows = merged.rows.filter(r => r._source !== GAP_MARKER);
         const numericCols = merged.headers.filter(h =>
             realRows.some(r => typeof r[h] === 'number')
         );
