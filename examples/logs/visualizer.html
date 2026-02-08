@@ -427,19 +427,24 @@
 
     // === CSV Parser ===
     function parseCSV(text) {
-        const lines = text.trim().split('\n').filter(l => l.trim());
+        // Strip null bytes (SparkFun DataLogger embeds \0 at end of each line)
+        const lines = text.replace(/\0/g, '').trim().split('\n').filter(l => l.trim());
         if (lines.length < 2) return null;
 
-        const headers = lines[0].split(',').map(h => h.trim());
+        const headers = lines[0].split(',').map(h => h.trim()).filter(h => h);
         const rows = [];
 
         for (let i = 1; i < lines.length; i++) {
             const values = lines[i].split(',').map(v => v.trim());
-            if (values.length !== headers.length) continue;
+            // Accept rows with at least as many columns as headers (trailing commas ok)
+            if (values.length < headers.length) continue;
             const row = {};
             headers.forEach((h, idx) => {
-                const num = parseFloat(values[idx]);
-                row[h] = isNaN(num) ? values[idx] : num;
+                const v = values[idx];
+                // Use Number() instead of parseFloat() so '2026-02-08T05:29:32'
+                // stays a string (parseFloat would return 2026)
+                const num = v === '' ? NaN : Number(v);
+                row[h] = isNaN(num) ? v : num;
             });
             rows.push(row);
         }
