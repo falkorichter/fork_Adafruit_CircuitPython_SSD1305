@@ -147,6 +147,12 @@
         '#ff6b6b', '#c0c0c0'
     ];
 
+    // Extended colors for multi-file view (one color per file)
+    const FILE_COLORS = [
+        '#e94560', '#53d8fb', '#f5a623', '#7ed321',
+        '#bd10e0', '#50e3c2', '#ff6b6b', '#4a90d9'
+    ];
+
     // === State ===
     let charts = {};
     let currentData = null;
@@ -433,9 +439,185 @@
         reader.readAsText(file);
     }
 
+    // === Merge multiple datasets (union of headers, concatenated rows with source tag) ===
+    function mergeDatasets(filesData) {
+        // Collect union of all headers, preserving order
+        const headerSet = new Set();
+        const allHeaders = [];
+        for (const { headers } of filesData) {
+            for (const h of headers) {
+                if (!headerSet.has(h)) {
+                    headerSet.add(h);
+                    allHeaders.push(h);
+                }
+            }
+        }
+
+        // Concatenate rows, adding _source tag and null separator between files
+        const allRows = [];
+        for (const { rows, filename } of filesData) {
+            if (allRows.length > 0) {
+                // Insert a null gap row to visually separate files
+                const gap = { _source: '__gap__' };
+                allHeaders.forEach(h => gap[h] = null);
+                allRows.push(gap);
+            }
+            for (const row of rows) {
+                allRows.push({ ...row, _source: filename });
+            }
+        }
+
+        return { headers: allHeaders, rows: allRows, fileNames: filesData.map(f => f.filename) };
+    }
+
+    // === Load all built-in files combined ===
+    async function loadAllFiles() {
+        try {
+            document.getElementById('dashboard').innerHTML = '<div class="loading">Loading all files...</div>';
+            const filesData = [];
+            for (const f of BUILTIN_FILES) {
+                const resp = await fetch(f);
+                if (!resp.ok) continue;
+                const text = await resp.text();
+                const data = parseCSV(text);
+                if (data && data.rows.length > 0) {
+                    filesData.push({ headers: data.headers, rows: data.rows, filename: f });
+                }
+            }
+            if (filesData.length === 0) throw new Error('No files loaded');
+            const merged = mergeDatasets(filesData);
+            renderCombinedDashboard(merged);
+        } catch (e) {
+            document.getElementById('dashboard').innerHTML =
+                `<div class="error">Failed to load files: ${e.message}<br>
+                 <small>If opening locally, use a local server: <code>python3 -m http.server</code></small></div>`;
+        }
+    }
+
+    // === Render combined stats ===
+    function renderCombinedStats(merged) {
+        const bar = document.getElementById('stats-bar');
+        const realRows = merged.rows.filter(r => r._source !== '__gap__');
+        const numericCols = merged.headers.filter(h =>
+            realRows.some(r => typeof r[h] === 'number')
+        );
+
+        let html = `<div class="stat"><div class="stat-value">All Files</div><div class="stat-label">${merged.fileNames.length} files combined</div></div>`;
+        html += `<div class="stat"><div class="stat-value">${realRows.length.toLocaleString()}</div><div class="stat-label">Total Data Points</div></div>`;
+        html += `<div class="stat"><div class="stat-value">${merged.headers.length}</div><div class="stat-label">Unique Columns</div></div>`;
+        html += `<div class="stat"><div class="stat-value">${numericCols.length}</div><div class="stat-label">Numeric Sensors</div></div>`;
+
+        bar.innerHTML = html;
+    }
+
+    // === Render combined dashboard (multi-file, per-file colored series) ===
+    function renderCombinedDashboard(merged) {
+        Object.values(charts).forEach(c => c.destroy());
+        charts = {};
+        currentData = merged;
+
+        renderCombinedStats(merged);
+
+        const dashboard = document.getElementById('dashboard');
+        dashboard.innerHTML = '';
+
+        const MAX_POINTS = 2000;
+        let chartCount = 0;
+
+        for (const [groupName, patterns] of Object.entries(SENSOR_GROUPS)) {
+            const cols = matchColumns(merged.headers, patterns);
+            if (cols.length === 0) continue;
+
+            const numericCols = cols.filter(c =>
+                merged.rows.some(r => typeof r[c] === 'number')
+            );
+            if (numericCols.length === 0) continue;
+
+            const card = document.createElement('div');
+            card.className = 'chart-card';
+            card.innerHTML = `<h3>${groupName}</h3><div class="chart-container"><canvas id="chart-${chartCount}"></canvas></div>`;
+            dashboard.appendChild(card);
+
+            const ctx = document.getElementById(`chart-${chartCount}`).getContext('2d');
+
+            // Build one dataset per (column × file) combination
+            const datasets = [];
+            numericCols.forEach((col) => {
+                merged.fileNames.forEach((fname, fi) => {
+                    // Extract only this file's data for this column, with nulls elsewhere
+                    const seriesData = merged.rows.map(r => {
+                        if (r._source === fname && typeof r[col] === 'number') return r[col];
+                        return null;
+                    });
+                    // Skip if this file has no data for this column
+                    if (seriesData.every(v => v === null)) return;
+
+                    const shortCol = col.replace(/^[^.]+\./, '');
+                    datasets.push({
+                        label: `${shortCol} (${fname})`,
+                        data: downsample(seriesData, MAX_POINTS),
+                        borderColor: FILE_COLORS[fi % FILE_COLORS.length],
+                        backgroundColor: FILE_COLORS[fi % FILE_COLORS.length] + '20',
+                        borderWidth: 1.5,
+                        pointRadius: 0,
+                        tension: 0.3,
+                        spanGaps: false
+                    });
+                });
+            });
+
+            if (datasets.length === 0) continue;
+
+            const xLabels = downsample(merged.rows.map((_, i) => i + 1), MAX_POINTS);
+
+            charts[`chart-${chartCount}`] = new Chart(ctx, {
+                type: 'line',
+                data: { labels: xLabels, datasets },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    animation: false,
+                    interaction: { mode: 'index', intersect: false },
+                    plugins: {
+                        legend: { labels: { color: '#ccc', boxWidth: 12 } },
+                        tooltip: { mode: 'index', intersect: false }
+                    },
+                    scales: {
+                        x: {
+                            title: { display: true, text: 'Sample #', color: '#888' },
+                            ticks: { color: '#666', maxTicksLimit: 10 },
+                            grid: { color: '#ffffff10' }
+                        },
+                        y: {
+                            title: { display: true, text: numericCols[0].replace(/^[^.]+\./, ''), color: '#888' },
+                            ticks: { color: '#666' },
+                            grid: { color: '#ffffff10' }
+                        }
+                    }
+                }
+            });
+            chartCount++;
+        }
+
+        if (chartCount === 0) {
+            dashboard.innerHTML = '<div class="error">No numeric sensor data found.</div>';
+        }
+    }
+
     // === Initialize controls ===
     function init() {
         const controls = document.getElementById('controls');
+
+        // Add "All Files" button first
+        const allBtn = document.createElement('button');
+        allBtn.className = 'file-btn load-all';
+        allBtn.textContent = '📊 All Files';
+        allBtn.onclick = () => {
+            document.querySelectorAll('.file-btn').forEach(b => b.classList.remove('active'));
+            allBtn.classList.add('active');
+            loadAllFiles();
+        };
+        controls.insertBefore(allBtn, controls.firstChild);
 
         BUILTIN_FILES.forEach(f => {
             const btn = document.createElement('button');
