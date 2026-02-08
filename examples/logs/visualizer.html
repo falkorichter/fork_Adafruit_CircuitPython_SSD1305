@@ -148,6 +148,104 @@
             font-size: 0.8em;
             margin-bottom: 10px;
         }
+        .logger-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .logger-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            cursor: pointer;
+            user-select: none;
+            color: #ccc;
+            font-size: 0.95em;
+        }
+        .logger-toggle:hover { background: #1a2745; }
+        .logger-toggle .arrow { transition: transform 0.2s; }
+        .logger-toggle.open .arrow { transform: rotate(90deg); }
+        .logger-body {
+            display: none;
+            padding: 16px;
+            border-top: 1px solid var(--border);
+        }
+        .logger-body.open { display: block; }
+        .logger-url-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .logger-url-row label { font-size: 0.85em; color: #aaa; white-space: nowrap; }
+        .logger-url-row input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 6px 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .logger-url-row input[type="text"]:focus { border-color: var(--accent); outline: none; }
+        .btn-connect {
+            padding: 6px 16px;
+            background: var(--accent);
+            border: none;
+            color: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            white-space: nowrap;
+        }
+        .btn-connect:hover { opacity: 0.9; }
+        .btn-connect:disabled { opacity: 0.5; cursor: not-allowed; }
+        .logger-status {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        .logger-status.error { color: var(--accent); }
+        .logger-status.success { color: #7ed321; }
+        .logger-file-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 12px;
+        }
+        .logger-file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 8px;
+            border-bottom: 1px solid #ffffff08;
+            font-size: 0.85em;
+        }
+        .logger-file-item:hover { background: #1a2745; }
+        .logger-file-item input[type="checkbox"] { accent-color: var(--accent); }
+        .logger-file-item .fname { flex: 1; color: var(--text); }
+        .logger-file-item .fsize { color: #888; min-width: 80px; text-align: right; }
+        .logger-file-item .fdate { color: #666; min-width: 120px; text-align: right; }
+        .logger-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn-select-all {
+            padding: 4px 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: #aaa;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .btn-select-all:hover { border-color: var(--accent); color: var(--text); }
         .dashboard {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
@@ -189,6 +287,27 @@
     <div class="controls" id="controls">
         <label class="upload-btn" for="file-upload">📁 Upload CSV/TXT files</label>
         <input type="file" id="file-upload" accept=".txt,.csv" multiple>
+    </div>
+
+    <div class="logger-panel" id="logger-panel">
+        <div class="logger-toggle" id="logger-toggle">
+            <span>📡 Download from DataLogger</span>
+            <span class="arrow">▶</span>
+        </div>
+        <div class="logger-body" id="logger-body">
+            <div class="logger-url-row">
+                <label>Logger URL:</label>
+                <input type="text" id="logger-url" placeholder="http://datalogger5b7a0.local" value="http://datalogger5b7a0.local">
+                <button class="btn-connect" id="btn-connect">Connect</button>
+            </div>
+            <div class="logger-status" id="logger-status"></div>
+            <div class="logger-file-list" id="logger-file-list"></div>
+            <div class="logger-actions" id="logger-actions" style="display:none">
+                <button class="btn-select-all" id="btn-select-all">Select All</button>
+                <button class="btn-connect" id="btn-download-selected">Download &amp; Visualize Selected</button>
+                <span id="logger-dl-status" style="font-size:0.85em;color:#888"></span>
+            </div>
+        </div>
     </div>
 
     <div class="settings-panel" id="settings-panel">
@@ -686,7 +805,7 @@
         });
         var ungrouped = data.headers.filter(function(h) {
             return !groupedCols.has(h) &&
-                h !== 'General.Entry' && h !== 'General.Time' &&
+                h !== 'General.Entry' && h !== 'General.Time' && h !== 'General.Board ID' &&
                 h !== 'System Info.SSID' && h !== 'System Info.Uptime' &&
                 data.rows.some(function(r) { return typeof r[h] === 'number'; });
         });
@@ -900,6 +1019,185 @@
         }
     }
 
+    // =========================================================================
+    // DataLogger WebSocket download
+    // =========================================================================
+    var loggerWS = null;
+    var loggerFiles = [];
+    var loggerAllPages = [];
+    var loggerCurrentPage = 0;
+    var loggerExpectingMore = false;
+
+    function loggerSetStatus(msg, type) {
+        var el = document.getElementById('logger-status');
+        el.textContent = msg;
+        el.className = 'logger-status' + (type ? ' ' + type : '');
+    }
+
+    function loggerConnect() {
+        var urlInput = document.getElementById('logger-url').value.trim().replace(/\/+$/, '');
+        if (!urlInput) { loggerSetStatus('Please enter the logger URL.', 'error'); return; }
+
+        var wsUrl = urlInput.replace(/^http/, 'ws') + '/ws';
+        loggerSetStatus('Connecting to ' + wsUrl + '...');
+        document.getElementById('btn-connect').disabled = true;
+        loggerFiles = [];
+        loggerAllPages = [];
+        loggerCurrentPage = 0;
+        loggerExpectingMore = false;
+        document.getElementById('logger-file-list').innerHTML = '';
+        document.getElementById('logger-actions').style.display = 'none';
+
+        try {
+            if (loggerWS && (loggerWS.readyState === 0 || loggerWS.readyState === 1)) {
+                loggerWS.close();
+            }
+            loggerWS = new WebSocket(wsUrl);
+        } catch (e) {
+            loggerSetStatus('Failed to connect: ' + e.message, 'error');
+            document.getElementById('btn-connect').disabled = false;
+            return;
+        }
+
+        loggerWS.onopen = function() {
+            loggerSetStatus('Connected. Fetching file list...');
+            loggerCurrentPage = 0;
+            loggerWS.send(JSON.stringify({ ty: 1, pg: 0 }));
+        };
+
+        loggerWS.onmessage = function(evt) {
+            try {
+                var msg = JSON.parse(evt.data);
+            } catch (e) {
+                loggerSetStatus('Invalid response from logger.', 'error');
+                return;
+            }
+
+            if (msg.files && Array.isArray(msg.files)) {
+                loggerAllPages = loggerAllPages.concat(msg.files);
+                loggerCurrentPage = msg.page || 0;
+
+                // If we got 20 files, there might be more pages
+                if (msg.count >= 20) {
+                    loggerExpectingMore = true;
+                    loggerWS.send(JSON.stringify({ ty: 1, pg: loggerCurrentPage + 1 }));
+                } else {
+                    // All pages fetched
+                    loggerFiles = loggerAllPages;
+                    loggerRenderFileList();
+                }
+            }
+        };
+
+        loggerWS.onerror = function() {
+            loggerSetStatus('WebSocket error. Make sure the logger is on the same network and the URL is correct.', 'error');
+            document.getElementById('btn-connect').disabled = false;
+        };
+
+        loggerWS.onclose = function() {
+            document.getElementById('btn-connect').disabled = false;
+            if (loggerExpectingMore && loggerAllPages.length > 0) {
+                loggerFiles = loggerAllPages;
+                loggerExpectingMore = false;
+                loggerRenderFileList();
+            } else if (loggerFiles.length === 0 && loggerAllPages.length === 0) {
+                loggerSetStatus('Connection closed. No files found or logger unreachable.', 'error');
+            }
+        };
+    }
+
+    function loggerRenderFileList() {
+        var container = document.getElementById('logger-file-list');
+        container.innerHTML = '';
+        loggerSetStatus('Found ' + loggerFiles.length + ' file(s). Select files to download:', 'success');
+        document.getElementById('logger-actions').style.display = 'flex';
+
+        // Filter to only show .txt and .csv files (log files)
+        var logFiles = loggerFiles.filter(function(f) {
+            var name = f.name.toLowerCase();
+            return name.endsWith('.txt') || name.endsWith('.csv');
+        });
+
+        if (logFiles.length === 0) {
+            loggerSetStatus('Found ' + loggerFiles.length + ' file(s) but none are .txt/.csv log files.', 'error');
+            document.getElementById('logger-actions').style.display = 'none';
+            return;
+        }
+
+        logFiles.forEach(function(f, i) {
+            var div = document.createElement('div');
+            div.className = 'logger-file-item';
+            div.innerHTML =
+                '<input type="checkbox" id="logfile-' + i + '" data-filename="' + f.name + '" checked>' +
+                '<label class="fname" for="logfile-' + i + '">' + f.name + '</label>' +
+                '<span class="fsize">' + formatFileSize(f.size) + '</span>' +
+                '<span class="fdate">' + (f.time || '') + '</span>';
+            container.appendChild(div);
+        });
+    }
+
+    function formatFileSize(bytes) {
+        if (typeof bytes !== 'number') return bytes || '';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    async function loggerDownloadSelected() {
+        var checkboxes = document.querySelectorAll('#logger-file-list input[type="checkbox"]:checked');
+        if (checkboxes.length === 0) {
+            loggerSetStatus('No files selected.', 'error');
+            return;
+        }
+
+        var baseUrl = document.getElementById('logger-url').value.trim().replace(/\/+$/, '');
+        var dlStatus = document.getElementById('logger-dl-status');
+        var filenames = [];
+        checkboxes.forEach(function(cb) { filenames.push(cb.dataset.filename); });
+
+        dlStatus.textContent = 'Downloading 0/' + filenames.length + '...';
+        document.getElementById('btn-download-selected').disabled = true;
+
+        var filesData = [];
+        for (var i = 0; i < filenames.length; i++) {
+            var fname = filenames[i];
+            dlStatus.textContent = 'Downloading ' + (i + 1) + '/' + filenames.length + ': ' + fname;
+            try {
+                var resp = await fetch(baseUrl + '/dl/' + fname);
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                var text = await resp.text();
+                var data = parseCSV(text);
+                if (data && data.rows.length > 0) {
+                    var enriched = computeDerivedFields(data, getThresholds());
+                    filesData.push({ headers: enriched.headers, rows: enriched.rows, filename: fname });
+                }
+            } catch (e) {
+                dlStatus.textContent = 'Error downloading ' + fname + ': ' + e.message;
+            }
+        }
+
+        document.getElementById('btn-download-selected').disabled = false;
+
+        if (filesData.length === 0) {
+            dlStatus.textContent = 'No valid data found in downloaded files.';
+            return;
+        }
+
+        dlStatus.textContent = 'Loaded ' + filesData.length + ' file(s).';
+        document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
+
+        if (filesData.length === 1) {
+            currentFilename = filesData[0].filename;
+            currentMode = 'single';
+            rawParsedData = { headers: filesData[0].headers, rows: filesData[0].rows };
+            renderDashboard(filesData[0], filesData[0].filename);
+        } else {
+            currentMode = 'combined';
+            var merged = mergeDatasets(filesData);
+            renderCombinedDashboard(merged);
+        }
+    }
+
     // === Initialize ===
     function init() {
         const controls = document.getElementById('controls');
@@ -937,6 +1235,26 @@
             document.getElementById('settings-toggle').classList.toggle('open');
             document.getElementById('settings-body').classList.toggle('open');
         });
+
+        // Logger panel toggle and actions
+        document.getElementById('logger-toggle').addEventListener('click', function() {
+            document.getElementById('logger-toggle').classList.toggle('open');
+            document.getElementById('logger-body').classList.toggle('open');
+        });
+
+        document.getElementById('btn-connect').addEventListener('click', loggerConnect);
+
+        document.getElementById('logger-url').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') loggerConnect();
+        });
+
+        document.getElementById('btn-select-all').addEventListener('click', function() {
+            var checkboxes = document.querySelectorAll('#logger-file-list input[type="checkbox"]');
+            var allChecked = Array.from(checkboxes).every(function(cb) { return cb.checked; });
+            checkboxes.forEach(function(cb) { cb.checked = !allChecked; });
+        });
+
+        document.getElementById('btn-download-selected').addEventListener('click', loggerDownloadSelected);
 
         document.getElementById('btn-apply-settings').addEventListener('click', function() {
             if (currentMode === 'combined') {

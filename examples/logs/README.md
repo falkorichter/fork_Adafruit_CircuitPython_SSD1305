@@ -27,6 +27,10 @@ python3 -m http.server 8000
 
 You can also drag-and-drop or upload any CSV/TXT file from the SparkFun DataLogger.
 
+### Download from DataLogger
+
+The visualizer can connect directly to a SparkFun DataLogger on your network to browse and download log files. Expand the "📡 Download from DataLogger" panel, enter the logger URL (e.g., `http://datalogger5b7a0.local`), and click **Connect**. Select which files to download and click **Download & Visualize Selected**.
+
 ## Grafana Import
 
 See **[GRAFANA_CSV_IMPORT.md](GRAFANA_CSV_IMPORT.md)** for instructions on importing these CSV logs into InfluxDB/Grafana, including deduplication strategies to avoid duplicate data when WiFi was intermittent.
