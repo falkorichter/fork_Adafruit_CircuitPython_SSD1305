@@ -183,30 +183,30 @@
     </style>
 </head>
 <body>
-    <h1>&#x1F4CA; Sensor Log Visualizer</h1>
+    <h1>📊 Sensor Log Visualizer</h1>
     <p class="subtitle">SparkFun DataLogger CSV Log Dashboard</p>
 
     <div class="controls" id="controls">
-        <label class="upload-btn" for="file-upload">&#x1F4C1; Upload CSV/TXT files</label>
+        <label class="upload-btn" for="file-upload">📁 Upload CSV/TXT files</label>
         <input type="file" id="file-upload" accept=".txt,.csv" multiple>
     </div>
 
     <div class="settings-panel" id="settings-panel">
         <div class="settings-toggle" id="settings-toggle">
-            <span>&#x2699;&#xFE0F; Calculated Fields &amp; Thresholds</span>
-            <span class="arrow">&#x25B6;</span>
+            <span>⚙️ Calculated Fields &amp; Thresholds</span>
+            <span class="arrow">▶</span>
         </div>
         <div class="settings-body" id="settings-body">
             <div class="settings-grid">
                 <div class="setting-group">
-                    <h4>&#x1F9CD; Person Detection (STHS34PF80)</h4>
+                    <h4>🧍 Person Detection (STHS34PF80)</h4>
                     <div class="setting-row">
                         <label>Presence threshold</label>
                         <input type="number" id="cfg-presence-threshold" value="1000" step="100">
                     </div>
                 </div>
                 <div class="setting-group">
-                    <h4>&#x1F32C;&#xFE0F; Air Quality (BME680)</h4>
+                    <h4>🌬️ Air Quality (BME680)</h4>
                     <div class="setting-row">
                         <label>Humidity baseline (%)</label>
                         <input type="number" id="cfg-hum-baseline" value="40" step="1">
@@ -221,7 +221,7 @@
                     </div>
                 </div>
                 <div class="setting-group">
-                    <h4>&#x1F9F2; Magnet Detection (MMC5983)</h4>
+                    <h4>🧲 Magnet Detection (MMC5983)</h4>
                     <div class="setting-row">
                         <label>Detection sigma</label>
                         <input type="number" id="cfg-mag-detect-sigma" value="5.0" step="0.5" min="0.5">
@@ -245,7 +245,7 @@
     </div>
 
     <div class="stats-bar" id="stats-bar"></div>
-    <div class="zoom-hint" id="zoom-hint" style="display:none">&#x1F50D; Scroll to zoom &#xB7; Drag to pan &#xB7; Double-click to reset zoom</div>
+    <div class="zoom-hint" id="zoom-hint" style="display:none">🔍 Scroll to zoom · Drag to pan · Double-click to reset zoom</div>
     <div id="dashboard" class="dashboard">
         <div class="loading" id="loading">Select a log file above or upload your own CSV/TXT files to get started.</div>
     </div>
@@ -553,14 +553,14 @@
         html += '<div class="stat"><div class="stat-value">' + numericCols.length + '</div><div class="stat-label">Numeric Sensors</div></div>';
 
         if (data.headers.includes('General.Time') && data.rows.length >= 2) {
-            var first = new Date(data.rows[0]['General.Time']);
-            var last = new Date(data.rows[data.rows.length - 1]['General.Time']);
+            const first = new Date(data.rows[0]['General.Time']);
+            const last = new Date(data.rows[data.rows.length - 1]['General.Time']);
             if (!isNaN(first.getTime()) && !isNaN(last.getTime())) {
-                var mins = ((last - first) / 60000).toFixed(0);
+                const mins = ((last - first) / 60000).toFixed(0);
                 html += '<div class="stat"><div class="stat-value">' + mins + ' min</div><div class="stat-label">Duration</div></div>';
             }
         } else if (data.headers.includes('System Info.Uptime') && data.rows.length >= 2) {
-            var dur = (data.rows[data.rows.length - 1]['System Info.Uptime'] - data.rows[0]['System Info.Uptime']) / 60000;
+            const dur = (data.rows[data.rows.length - 1]['System Info.Uptime'] - data.rows[0]['System Info.Uptime']) / 60000;
             html += '<div class="stat"><div class="stat-value">' + dur.toFixed(0) + ' min</div><div class="stat-label">Duration</div></div>';
         }
 
@@ -569,9 +569,9 @@
 
     // === Create chart helper ===
     function createChart(canvasId, xLabels, xLabel, datasets, yLabel, needsDualAxis, dualLabel) {
-        var ctx = document.getElementById(canvasId).getContext('2d');
+        const ctx = document.getElementById(canvasId).getContext('2d');
 
-        var scales = {
+        const scales = {
             x: {
                 title: { display: true, text: xLabel, color: '#888' },
                 ticks: { color: '#666', maxTicksLimit: 10 },
@@ -621,12 +621,12 @@
         renderStats(data, filename);
         document.getElementById('zoom-hint').style.display = 'block';
 
-        var dashboard = document.getElementById('dashboard');
+        const dashboard = document.getElementById('dashboard');
         dashboard.innerHTML = '';
 
-        var xAxis = getXAxis(data);
-        var MAX_POINTS = 1000;
-        var chartCount = 0;
+        const xAxis = getXAxis(data);
+        const MAX_POINTS = 1000;
+        let chartCount = 0;
 
         Object.entries(SENSOR_GROUPS).forEach(function(entry) {
             var groupName = entry[0];
@@ -722,17 +722,17 @@
     async function loadBuiltinFile(filename) {
         try {
             document.getElementById('dashboard').innerHTML = '<div class="loading">Loading...</div>';
-            var resp = await fetch(filename);
+            const resp = await fetch(filename);
             if (!resp.ok) throw new Error('HTTP ' + resp.status);
-            var text = await resp.text();
-            var data = parseCSV(text);
+            const text = await resp.text();
+            const data = parseCSV(text);
             if (!data || data.rows.length === 0) throw new Error('No data found');
 
             rawParsedData = parseCSV(text);
             currentFilename = filename;
             currentMode = 'single';
 
-            var enriched = computeDerivedFields(data, getThresholds());
+            const enriched = computeDerivedFields(data, getThresholds());
             renderDashboard(enriched, filename);
         } catch (e) {
             document.getElementById('dashboard').innerHTML =
@@ -742,7 +742,7 @@
     }
 
     function loadUploadedFile(file) {
-        var reader = new FileReader();
+        const reader = new FileReader();
         reader.onload = function() {
             var data = parseCSV(reader.result);
             if (!data || data.rows.length === 0) {
@@ -754,7 +754,7 @@
             currentFilename = file.name;
             currentMode = 'single';
 
-            var enriched = computeDerivedFields(data, getThresholds());
+            const enriched = computeDerivedFields(data, getThresholds());
             renderDashboard(enriched, file.name);
         };
         reader.readAsText(file);
@@ -792,15 +792,15 @@
     async function loadAllFiles() {
         try {
             document.getElementById('dashboard').innerHTML = '<div class="loading">Loading all files...</div>';
-            var filesData = [];
+            const filesData = [];
             for (var i = 0; i < BUILTIN_FILES.length; i++) {
                 var f = BUILTIN_FILES[i];
                 var resp = await fetch(f);
                 if (!resp.ok) continue;
-                var text = await resp.text();
-                var data = parseCSV(text);
+                const text = await resp.text();
+                const data = parseCSV(text);
                 if (data && data.rows.length > 0) {
-                    var enriched = computeDerivedFields(data, getThresholds());
+                    const enriched = computeDerivedFields(data, getThresholds());
                     filesData.push({ headers: enriched.headers, rows: enriched.rows, filename: f });
                 }
             }
@@ -841,11 +841,11 @@
         renderCombinedStats(merged);
         document.getElementById('zoom-hint').style.display = 'block';
 
-        var dashboard = document.getElementById('dashboard');
+        const dashboard = document.getElementById('dashboard');
         dashboard.innerHTML = '';
 
         var MAX_POINTS = 2000;
-        var chartCount = 0;
+        let chartCount = 0;
 
         Object.entries(SENSOR_GROUPS).forEach(function(entry) {
             var groupName = entry[0];
@@ -902,7 +902,7 @@
 
     // === Initialize ===
     function init() {
-        var controls = document.getElementById('controls');
+        const controls = document.getElementById('controls');
 
         var allBtn = document.createElement('button');
         allBtn.className = 'file-btn load-all';
