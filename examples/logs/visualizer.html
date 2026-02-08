@@ -233,8 +233,10 @@
         if (data.headers.includes('General.Time') && data.rows.length >= 2) {
             const first = new Date(data.rows[0]['General.Time']);
             const last = new Date(data.rows[data.rows.length - 1]['General.Time']);
-            const mins = ((last - first) / 60000).toFixed(0);
-            html += `<div class="stat"><div class="stat-value">${mins} min</div><div class="stat-label">Duration</div></div>`;
+            if (!isNaN(first.getTime()) && !isNaN(last.getTime())) {
+                const mins = ((last - first) / 60000).toFixed(0);
+                html += `<div class="stat"><div class="stat-value">${mins} min</div><div class="stat-label">Duration</div></div>`;
+            }
         } else if (data.headers.includes('System Info.Uptime') && data.rows.length >= 2) {
             const dur = (data.rows[data.rows.length - 1]['System Info.Uptime'] - data.rows[0]['System Info.Uptime']) / 60000;
             html += `<div class="stat"><div class="stat-value">${dur.toFixed(0)} min</div><div class="stat-label">Duration</div></div>`;

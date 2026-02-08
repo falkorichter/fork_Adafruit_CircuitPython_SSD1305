@@ -91,16 +91,22 @@ def csv_to_points(filepath, measurement="iot_sensor"):
             
             # Set timestamp
             if has_time:
-                ts = datetime.fromisoformat(row['General.Time'])
-                if ts.tzinfo is None:
-                    ts = ts.replace(tzinfo=timezone.utc)
-                p.time(ts, WritePrecision.S)
+                try:
+                    ts = datetime.fromisoformat(row['General.Time'])
+                    if ts.tzinfo is None:
+                        ts = ts.replace(tzinfo=timezone.utc)
+                    p.time(ts, WritePrecision.S)
+                except (ValueError, KeyError):
+                    continue  # Skip rows with invalid timestamps
             
             # Add tags for deduplication and filtering
             p.tag("source", "csv_import")
             p.tag("file", filepath.split('/')[-1])
             if has_entry:
-                p.tag("entry", str(int(row['General.Entry'])))
+                try:
+                    p.tag("entry", str(int(row['General.Entry'])))
+                except (ValueError, KeyError):
+                    pass
             if 'System Info.SSID' in row:
                 p.tag("ssid", str(row['System Info.SSID']))
             
