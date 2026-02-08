@@ -1077,7 +1077,8 @@
                 loggerAllPages = loggerAllPages.concat(msg.files);
                 loggerCurrentPage = msg.page || 0;
 
-                // If we got 20 files, there might be more pages
+                // DataLogger WebSocket returns up to 20 files per page;
+                // if we got a full page, request the next one
                 if (msg.count >= 20) {
                     loggerExpectingMore = true;
                     loggerWS.send(JSON.stringify({ ty: 1, pg: loggerCurrentPage + 1 }));
@@ -1127,11 +1128,30 @@
         logFiles.forEach(function(f, i) {
             var div = document.createElement('div');
             div.className = 'logger-file-item';
-            div.innerHTML =
-                '<input type="checkbox" id="logfile-' + i + '" data-filename="' + f.name + '" checked>' +
-                '<label class="fname" for="logfile-' + i + '">' + f.name + '</label>' +
-                '<span class="fsize">' + formatFileSize(f.size) + '</span>' +
-                '<span class="fdate">' + (f.time || '') + '</span>';
+
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'logfile-' + i;
+            cb.dataset.filename = f.name;
+            cb.checked = true;
+
+            var lbl = document.createElement('label');
+            lbl.className = 'fname';
+            lbl.htmlFor = 'logfile-' + i;
+            lbl.textContent = f.name;
+
+            var sizeSpan = document.createElement('span');
+            sizeSpan.className = 'fsize';
+            sizeSpan.textContent = formatFileSize(f.size);
+
+            var dateSpan = document.createElement('span');
+            dateSpan.className = 'fdate';
+            dateSpan.textContent = f.time || '';
+
+            div.appendChild(cb);
+            div.appendChild(lbl);
+            div.appendChild(sizeSpan);
+            div.appendChild(dateSpan);
             container.appendChild(div);
         });
     }
@@ -1163,7 +1183,7 @@
             var fname = filenames[i];
             dlStatus.textContent = 'Downloading ' + (i + 1) + '/' + filenames.length + ': ' + fname;
             try {
-                var resp = await fetch(baseUrl + '/dl/' + fname);
+                var resp = await fetch(baseUrl + '/dl/' + encodeURIComponent(fname));
                 if (!resp.ok) throw new Error('HTTP ' + resp.status);
                 var text = await resp.text();
                 var data = parseCSV(text);
