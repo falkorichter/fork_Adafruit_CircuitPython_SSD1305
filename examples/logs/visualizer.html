@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sensor Log Visualizer</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
     <style>
         :root {
             --bg: #1a1a2e;
@@ -73,6 +75,79 @@
         }
         .stat-value { font-size: 1.4em; font-weight: bold; color: var(--accent); }
         .stat-label { font-size: 0.75em; color: #888; }
+        .settings-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .settings-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            cursor: pointer;
+            user-select: none;
+            color: #ccc;
+            font-size: 0.95em;
+        }
+        .settings-toggle:hover { background: #1a2745; }
+        .settings-toggle .arrow { transition: transform 0.2s; }
+        .settings-toggle.open .arrow { transform: rotate(90deg); }
+        .settings-body {
+            display: none;
+            padding: 16px;
+            border-top: 1px solid var(--border);
+        }
+        .settings-body.open { display: block; }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+        .setting-group h4 {
+            color: var(--accent);
+            font-size: 0.85em;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .setting-row label { font-size: 0.85em; color: #aaa; }
+        .setting-row input {
+            width: 90px;
+            padding: 4px 8px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 4px;
+            text-align: right;
+            font-size: 0.85em;
+        }
+        .setting-row input:focus { border-color: var(--accent); outline: none; }
+        .btn-apply {
+            margin-top: 12px;
+            padding: 8px 24px;
+            background: var(--accent);
+            border: none;
+            color: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .btn-apply:hover { opacity: 0.9; }
+        .zoom-hint {
+            text-align: center;
+            color: #666;
+            font-size: 0.8em;
+            margin-bottom: 10px;
+        }
         .dashboard {
             display: grid;
             grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
@@ -103,60 +178,133 @@
         @media (max-width: 600px) {
             .dashboard { grid-template-columns: 1fr; }
             .chart-container { height: 220px; }
+            .settings-grid { grid-template-columns: 1fr; }
         }
     </style>
 </head>
 <body>
-    <h1>📊 Sensor Log Visualizer</h1>
+    <h1>&#x1F4CA; Sensor Log Visualizer</h1>
     <p class="subtitle">SparkFun DataLogger CSV Log Dashboard</p>
 
     <div class="controls" id="controls">
-        <label class="upload-btn" for="file-upload">📁 Upload CSV/TXT files</label>
+        <label class="upload-btn" for="file-upload">&#x1F4C1; Upload CSV/TXT files</label>
         <input type="file" id="file-upload" accept=".txt,.csv" multiple>
     </div>
 
+    <div class="settings-panel" id="settings-panel">
+        <div class="settings-toggle" id="settings-toggle">
+            <span>&#x2699;&#xFE0F; Calculated Fields &amp; Thresholds</span>
+            <span class="arrow">&#x25B6;</span>
+        </div>
+        <div class="settings-body" id="settings-body">
+            <div class="settings-grid">
+                <div class="setting-group">
+                    <h4>&#x1F9CD; Person Detection (STHS34PF80)</h4>
+                    <div class="setting-row">
+                        <label>Presence threshold</label>
+                        <input type="number" id="cfg-presence-threshold" value="1000" step="100">
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <h4>&#x1F32C;&#xFE0F; Air Quality (BME680)</h4>
+                    <div class="setting-row">
+                        <label>Humidity baseline (%)</label>
+                        <input type="number" id="cfg-hum-baseline" value="40" step="1">
+                    </div>
+                    <div class="setting-row">
+                        <label>Humidity weighting</label>
+                        <input type="number" id="cfg-hum-weighting" value="0.25" step="0.05" min="0" max="1">
+                    </div>
+                    <div class="setting-row">
+                        <label>Burn-in samples</label>
+                        <input type="number" id="cfg-gas-burnin" value="20" step="5" min="1">
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <h4>&#x1F9F2; Magnet Detection (MMC5983)</h4>
+                    <div class="setting-row">
+                        <label>Detection sigma</label>
+                        <input type="number" id="cfg-mag-detect-sigma" value="5.0" step="0.5" min="0.5">
+                    </div>
+                    <div class="setting-row">
+                        <label>Release sigma</label>
+                        <input type="number" id="cfg-mag-release-sigma" value="3.0" step="0.5" min="0.5">
+                    </div>
+                    <div class="setting-row">
+                        <label>Baseline samples</label>
+                        <input type="number" id="cfg-mag-baseline-samples" value="50" step="5" min="5">
+                    </div>
+                    <div class="setting-row">
+                        <label>Min calibration samples</label>
+                        <input type="number" id="cfg-mag-min-samples" value="10" step="1" min="3">
+                    </div>
+                </div>
+            </div>
+            <button class="btn-apply" id="btn-apply-settings">Apply &amp; Recalculate</button>
+        </div>
+    </div>
+
     <div class="stats-bar" id="stats-bar"></div>
+    <div class="zoom-hint" id="zoom-hint" style="display:none">&#x1F50D; Scroll to zoom &#xB7; Drag to pan &#xB7; Double-click to reset zoom</div>
     <div id="dashboard" class="dashboard">
         <div class="loading" id="loading">Select a log file above or upload your own CSV/TXT files to get started.</div>
     </div>
 
     <script>
     // === Configuration ===
-    // Built-in log files (relative to this HTML file)
     const BUILTIN_FILES = [
         'sfe0001.txt', 'sfe0002.txt', 'sfe0003.txt',
         'sfe0005.txt', 'sfe0006.txt', 'sfe0009.txt'
     ];
 
-    // Sensor grouping: maps display group names to column name patterns
     const SENSOR_GROUPS = {
         'Temperature': ['TMP117.Temperature', 'BME68x.TemperatureC', 'MMC5983.Temperature', 'STHS34PF80.Temperature'],
         'Light': ['VEML7700.Ambient Light', 'VEML7700.Lux', 'VEML7700.White', 'VEML6075.UVA', 'VEML6075.UVB', 'VEML6075.UV Index'],
         'Humidity & Pressure': ['BME68x.Humidity', 'BME68x.Pressure'],
         'Air Quality (Gas)': ['BME68x.Gas Resistance', 'BME68x.Sensor Status'],
+        'Air Quality Score (calculated)': ['_calc.Air Quality'],
         'Battery': ['MAX17048.Voltage', 'MAX17048.State Of Charge', 'MAX17048.Change Rate'],
         'Magnetic Field': ['MMC5983.X Field', 'MMC5983.Y Field', 'MMC5983.Z Field'],
+        'Magnet Detection (calculated)': ['_calc.Mag Magnitude', '_calc.Mag Baseline', '_calc.Mag Z-Score', '_calc.Magnet Detected'],
         'Presence & Motion': ['STHS34PF80.Presence', 'STHS34PF80.Motion'],
+        'Person Present (calculated)': ['_calc.Person Present'],
         'System': ['System Info.RSSI', 'System Info.Uptime', 'System Info.Heap', 'System Info.SD Free']
     };
 
-    // Chart colors palette
     const COLORS = [
         '#e94560', '#0f3460', '#53d8fb', '#f5a623',
         '#7ed321', '#bd10e0', '#4a90d9', '#50e3c2',
         '#ff6b6b', '#c0c0c0'
     ];
 
-    // Extended colors for multi-file view
     const FILE_COLORS = [
         '#e94560', '#53d8fb', '#f5a623', '#7ed321',
         '#bd10e0', '#50e3c2', '#ff6b6b', '#4a90d9'
     ];
     const GAP_MARKER = '__gap__';
+    const MAD_SCALE_FACTOR = 1.4826;
+    const MIN_SIGMA = 0.005;
 
     // === State ===
     let charts = {};
     let currentData = null;
+    let currentFilename = null;
+    let currentMode = 'single';
+    let rawParsedData = null;
+
+    // === Read thresholds from UI ===
+    function getThresholds() {
+        return {
+            presenceThreshold: parseFloat(document.getElementById('cfg-presence-threshold').value) || 1000,
+            humBaseline: parseFloat(document.getElementById('cfg-hum-baseline').value) || 40,
+            humWeighting: parseFloat(document.getElementById('cfg-hum-weighting').value) || 0.25,
+            gasBurnin: parseInt(document.getElementById('cfg-gas-burnin').value) || 20,
+            magDetectSigma: parseFloat(document.getElementById('cfg-mag-detect-sigma').value) || 5.0,
+            magReleaseSigma: parseFloat(document.getElementById('cfg-mag-release-sigma').value) || 3.0,
+            magBaselineSamples: parseInt(document.getElementById('cfg-mag-baseline-samples').value) || 50,
+            magMinSamples: parseInt(document.getElementById('cfg-mag-min-samples').value) || 10
+        };
+    }
 
     // === CSV Parser ===
     function parseCSV(text) {
@@ -180,9 +328,172 @@
         return { headers, rows };
     }
 
+    // === Statistics helpers ===
+    function calcMedian(arr) {
+        const s = [...arr].sort((a, b) => a - b);
+        const n = s.length;
+        const mid = Math.floor(n / 2);
+        return n % 2 === 0 ? (s[mid - 1] + s[mid]) / 2.0 : s[mid];
+    }
+
+    function calcMAD(arr, med) {
+        const devs = arr.map(x => Math.abs(x - med));
+        return calcMedian(devs);
+    }
+
+    // === Compute calculated/derived fields ===
+    function computeDerivedFields(data, thresholds) {
+        const t = thresholds;
+        const newHeaders = [...data.headers];
+        const addedHeaders = new Set();
+
+        const hasPresence = data.headers.some(h => h.startsWith('STHS34PF80.Presence'));
+        const hasMotion = data.headers.some(h => h.startsWith('STHS34PF80.Motion'));
+        const hasGas = data.headers.some(h => h.startsWith('BME68x.Gas Resistance'));
+        const hasHumidity = data.headers.some(h => h.startsWith('BME68x.Humidity'));
+        const hasMagX = data.headers.some(h => h.startsWith('MMC5983.X Field'));
+        const hasMagY = data.headers.some(h => h.startsWith('MMC5983.Y Field'));
+        const hasMagZ = data.headers.some(h => h.startsWith('MMC5983.Z Field'));
+
+        const presenceCol = data.headers.find(h => h.startsWith('STHS34PF80.Presence'));
+        const motionCol = data.headers.find(h => h.startsWith('STHS34PF80.Motion'));
+        const gasCol = data.headers.find(h => h.startsWith('BME68x.Gas Resistance'));
+        const humCol = data.headers.find(h => h.startsWith('BME68x.Humidity'));
+        const magXCol = data.headers.find(h => h.startsWith('MMC5983.X Field'));
+        const magYCol = data.headers.find(h => h.startsWith('MMC5983.Y Field'));
+        const magZCol = data.headers.find(h => h.startsWith('MMC5983.Z Field'));
+
+        function addHeader(h) {
+            if (!addedHeaders.has(h)) { addedHeaders.add(h); newHeaders.push(h); }
+        }
+
+        // --- Person Present ---
+        if (hasPresence || hasMotion) {
+            addHeader('_calc.Person Present');
+            for (const row of data.rows) {
+                const pv = hasPresence ? row[presenceCol] : null;
+                const mv = hasMotion ? row[motionCol] : null;
+                const presDetected = typeof pv === 'number' && pv >= t.presenceThreshold;
+                const motDetected = typeof mv === 'number' && mv > 0;
+                row['_calc.Person Present'] = (presDetected || motDetected) ? 1 : 0;
+            }
+        }
+
+        // --- Air Quality Score ---
+        if (hasGas && hasHumidity) {
+            addHeader('_calc.Air Quality');
+            addHeader('_calc.Gas Baseline');
+
+            const gasSamples = [];
+            for (const row of data.rows) {
+                const gas = row[gasCol];
+                const hum = row[humCol];
+
+                if (typeof gas !== 'number' || typeof hum !== 'number' || gas <= 0) {
+                    row['_calc.Air Quality'] = null;
+                    row['_calc.Gas Baseline'] = null;
+                    continue;
+                }
+
+                gasSamples.push(gas);
+                if (gasSamples.length > 50) gasSamples.shift();
+
+                if (gasSamples.length < t.gasBurnin) {
+                    row['_calc.Air Quality'] = null;
+                    row['_calc.Gas Baseline'] = null;
+                    continue;
+                }
+
+                const gasBaseline = gasSamples.reduce((a, b) => a + b, 0) / gasSamples.length;
+                const gasOffset = gasBaseline - gas;
+                const humOffset = hum - t.humBaseline;
+
+                let humScore;
+                if (humOffset > 0) {
+                    const denom = 100 - t.humBaseline;
+                    humScore = denom > 0 ? ((100 - t.humBaseline - humOffset) / denom) * (t.humWeighting * 100) : 0;
+                } else {
+                    humScore = t.humBaseline > 0 ? ((t.humBaseline + humOffset) / t.humBaseline) * (t.humWeighting * 100) : 0;
+                }
+
+                let gasScore;
+                if (gasOffset > 0 && gasBaseline > 0) {
+                    gasScore = (gas / gasBaseline) * (100 - t.humWeighting * 100);
+                } else {
+                    gasScore = 100 - t.humWeighting * 100;
+                }
+
+                row['_calc.Air Quality'] = Math.max(0, Math.min(100, humScore + gasScore));
+                row['_calc.Gas Baseline'] = gasBaseline;
+            }
+        }
+
+        // --- Magnetic Magnitude & Magnet Detection ---
+        if (hasMagX && hasMagY && hasMagZ) {
+            addHeader('_calc.Mag Magnitude');
+            addHeader('_calc.Mag Baseline');
+            addHeader('_calc.Mag Z-Score');
+            addHeader('_calc.Magnet Detected');
+
+            const cleanHistory = [];
+            let magDetected = false;
+
+            for (const row of data.rows) {
+                const x = row[magXCol];
+                const y = row[magYCol];
+                const z = row[magZCol];
+
+                if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') {
+                    row['_calc.Mag Magnitude'] = null;
+                    row['_calc.Mag Baseline'] = null;
+                    row['_calc.Mag Z-Score'] = null;
+                    row['_calc.Magnet Detected'] = null;
+                    continue;
+                }
+
+                const magnitude = Math.sqrt(x * x + y * y + z * z);
+                row['_calc.Mag Magnitude'] = magnitude;
+
+                if (cleanHistory.length < t.magMinSamples) {
+                    cleanHistory.push(magnitude);
+                    if (cleanHistory.length > t.magBaselineSamples) cleanHistory.shift();
+                    row['_calc.Mag Baseline'] = calcMedian(cleanHistory);
+                    row['_calc.Mag Z-Score'] = 0;
+                    row['_calc.Magnet Detected'] = 0;
+                    continue;
+                }
+
+                const bl = calcMedian(cleanHistory);
+                const madVal = calcMAD(cleanHistory, bl);
+                const sigma = Math.max(madVal * MAD_SCALE_FACTOR, MIN_SIGMA);
+                const zScore = Math.abs(magnitude - bl) / sigma;
+
+                if (magDetected) {
+                    if (zScore < t.magReleaseSigma) {
+                        magDetected = false;
+                        cleanHistory.push(magnitude);
+                        if (cleanHistory.length > t.magBaselineSamples) cleanHistory.shift();
+                    }
+                } else {
+                    if (zScore > t.magDetectSigma) {
+                        magDetected = true;
+                    } else {
+                        cleanHistory.push(magnitude);
+                        if (cleanHistory.length > t.magBaselineSamples) cleanHistory.shift();
+                    }
+                }
+
+                row['_calc.Mag Baseline'] = bl;
+                row['_calc.Mag Z-Score'] = zScore;
+                row['_calc.Magnet Detected'] = magDetected ? 1 : 0;
+            }
+        }
+
+        return { headers: newHeaders, rows: data.rows };
+    }
+
     // === Determine X-axis ===
     function getXAxis(data) {
-        // Prefer real timestamps
         if (data.headers.includes('General.Time')) {
             return {
                 type: 'time',
@@ -190,7 +501,6 @@
                 label: 'Time'
             };
         }
-        // Use uptime if available (convert ms to minutes)
         if (data.headers.includes('System Info.Uptime')) {
             return {
                 type: 'linear',
@@ -198,7 +508,6 @@
                 label: 'Uptime (min)'
             };
         }
-        // Fall back to sample index
         return {
             type: 'linear',
             labels: data.rows.map((_, i) => i + 1),
@@ -206,14 +515,10 @@
         };
     }
 
-    // === Match columns to a group ===
     function matchColumns(headers, patterns) {
-        return headers.filter(h => {
-            return patterns.some(p => h.startsWith(p));
-        });
+        return headers.filter(h => patterns.some(p => h.startsWith(p)));
     }
 
-    // === Downsample for performance ===
     function downsample(arr, maxPoints) {
         if (arr.length <= maxPoints) return arr;
         const step = arr.length / maxPoints;
@@ -224,6 +529,17 @@
         return result;
     }
 
+    function zoomPluginConfig() {
+        return {
+            pan: { enabled: true, mode: 'x', threshold: 5 },
+            zoom: {
+                wheel: { enabled: true },
+                pinch: { enabled: true },
+                mode: 'x',
+            }
+        };
+    }
+
     // === Render Stats Bar ===
     function renderStats(data, filename) {
         const bar = document.getElementById('stats-bar');
@@ -231,66 +547,109 @@
             data.rows.length > 0 && typeof data.rows[0][h] === 'number'
         );
 
-        let html = `<div class="stat"><div class="stat-value">${filename}</div><div class="stat-label">File</div></div>`;
-        html += `<div class="stat"><div class="stat-value">${data.rows.length.toLocaleString()}</div><div class="stat-label">Data Points</div></div>`;
-        html += `<div class="stat"><div class="stat-value">${data.headers.length}</div><div class="stat-label">Columns</div></div>`;
-        html += `<div class="stat"><div class="stat-value">${numericCols.length}</div><div class="stat-label">Numeric Sensors</div></div>`;
+        let html = '<div class="stat"><div class="stat-value">' + filename + '</div><div class="stat-label">File</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + data.rows.length.toLocaleString() + '</div><div class="stat-label">Data Points</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + data.headers.length + '</div><div class="stat-label">Columns</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + numericCols.length + '</div><div class="stat-label">Numeric Sensors</div></div>';
 
-        // Duration estimate
         if (data.headers.includes('General.Time') && data.rows.length >= 2) {
-            const first = new Date(data.rows[0]['General.Time']);
-            const last = new Date(data.rows[data.rows.length - 1]['General.Time']);
+            var first = new Date(data.rows[0]['General.Time']);
+            var last = new Date(data.rows[data.rows.length - 1]['General.Time']);
             if (!isNaN(first.getTime()) && !isNaN(last.getTime())) {
-                const mins = ((last - first) / 60000).toFixed(0);
-                html += `<div class="stat"><div class="stat-value">${mins} min</div><div class="stat-label">Duration</div></div>`;
+                var mins = ((last - first) / 60000).toFixed(0);
+                html += '<div class="stat"><div class="stat-value">' + mins + ' min</div><div class="stat-label">Duration</div></div>';
             }
         } else if (data.headers.includes('System Info.Uptime') && data.rows.length >= 2) {
-            const dur = (data.rows[data.rows.length - 1]['System Info.Uptime'] - data.rows[0]['System Info.Uptime']) / 60000;
-            html += `<div class="stat"><div class="stat-value">${dur.toFixed(0)} min</div><div class="stat-label">Duration</div></div>`;
+            var dur = (data.rows[data.rows.length - 1]['System Info.Uptime'] - data.rows[0]['System Info.Uptime']) / 60000;
+            html += '<div class="stat"><div class="stat-value">' + dur.toFixed(0) + ' min</div><div class="stat-label">Duration</div></div>';
         }
 
         bar.innerHTML = html;
     }
 
-    // === Render Dashboard ===
+    // === Create chart helper ===
+    function createChart(canvasId, xLabels, xLabel, datasets, yLabel, needsDualAxis, dualLabel) {
+        var ctx = document.getElementById(canvasId).getContext('2d');
+
+        var scales = {
+            x: {
+                title: { display: true, text: xLabel, color: '#888' },
+                ticks: { color: '#666', maxTicksLimit: 10 },
+                grid: { color: '#ffffff10' }
+            },
+            y: {
+                title: { display: true, text: yLabel, color: '#888' },
+                ticks: { color: '#666' },
+                grid: { color: '#ffffff10' }
+            }
+        };
+
+        if (needsDualAxis) {
+            scales.y.position = 'left';
+            scales.y1 = {
+                position: 'right',
+                title: { display: true, text: dualLabel || '', color: '#888' },
+                ticks: { color: '#666' },
+                grid: { drawOnChartArea: false }
+            };
+        }
+
+        return new Chart(ctx, {
+            type: 'line',
+            data: { labels: xLabels, datasets: datasets },
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: '#ccc', boxWidth: 12 } },
+                    tooltip: { mode: 'index', intersect: false },
+                    zoom: zoomPluginConfig()
+                },
+                scales: scales
+            }
+        });
+    }
+
+    // === Render Dashboard (single file) ===
     function renderDashboard(data, filename) {
-        // Destroy old charts
-        Object.values(charts).forEach(c => c.destroy());
+        Object.values(charts).forEach(function(c) { c.destroy(); });
         charts = {};
         currentData = data;
 
         renderStats(data, filename);
+        document.getElementById('zoom-hint').style.display = 'block';
 
-        const dashboard = document.getElementById('dashboard');
+        var dashboard = document.getElementById('dashboard');
         dashboard.innerHTML = '';
 
-        const xAxis = getXAxis(data);
-        const MAX_POINTS = 1000;
+        var xAxis = getXAxis(data);
+        var MAX_POINTS = 1000;
+        var chartCount = 0;
 
-        let chartCount = 0;
+        Object.entries(SENSOR_GROUPS).forEach(function(entry) {
+            var groupName = entry[0];
+            var patterns = entry[1];
+            var cols = matchColumns(data.headers, patterns);
+            if (cols.length === 0) return;
 
-        for (const [groupName, patterns] of Object.entries(SENSOR_GROUPS)) {
-            const cols = matchColumns(data.headers, patterns);
-            if (cols.length === 0) continue;
+            var numericCols = cols.filter(function(c) {
+                return data.rows.some(function(r) { return typeof r[c] === 'number'; });
+            });
+            if (numericCols.length === 0) return;
 
-            // Filter out non-numeric columns
-            const numericCols = cols.filter(c =>
-                data.rows.some(r => typeof r[c] === 'number')
-            );
-            if (numericCols.length === 0) continue;
-
-            const card = document.createElement('div');
+            var chartId = 'chart-' + chartCount;
+            var card = document.createElement('div');
             card.className = 'chart-card';
-            card.innerHTML = `<h3>${groupName}</h3><div class="chart-container"><canvas id="chart-${chartCount}"></canvas></div>`;
+            card.innerHTML = '<h3>' + groupName + '</h3><div class="chart-container"><canvas id="' + chartId + '"></canvas></div>';
             dashboard.appendChild(card);
 
-            const ctx = document.getElementById(`chart-${chartCount}`).getContext('2d');
-
-            const xLabels = downsample(xAxis.labels, MAX_POINTS);
-            const datasets = numericCols.map((col, i) => {
-                const rawData = data.rows.map(r => r[col]);
+            var xLabels = downsample(xAxis.labels, MAX_POINTS);
+            var datasets = numericCols.map(function(col, i) {
+                var rawData = data.rows.map(function(r) { return r[col]; });
                 return {
-                    label: col.replace(/^[^.]+\./, ''),  // Remove sensor prefix for readability
+                    label: col.replace(/^[^.]+\./, ''),
                     data: downsample(rawData, MAX_POINTS),
                     borderColor: COLORS[i % COLORS.length],
                     backgroundColor: COLORS[i % COLORS.length] + '20',
@@ -301,11 +660,10 @@
                 };
             });
 
-            // Check if some datasets have very different scales
-            const needsDualAxis = numericCols.length === 2 && (() => {
-                const maxes = numericCols.map(c => {
-                    const vals = data.rows.map(r => r[c]).filter(v => typeof v === 'number');
-                    return Math.max(...vals);
+            var needsDualAxis = numericCols.length === 2 && (function() {
+                var maxes = numericCols.map(function(c) {
+                    var vals = data.rows.map(function(r) { return r[c]; }).filter(function(v) { return typeof v === 'number'; });
+                    return vals.length > 0 ? Math.max.apply(null, vals) : 0;
                 });
                 return maxes[0] > 0 && maxes[1] > 0 && (maxes[0] / maxes[1] > 10 || maxes[1] / maxes[0] > 10);
             })();
@@ -314,94 +672,45 @@
                 datasets[1].yAxisID = 'y1';
             }
 
-            const scales = {
-                x: {
-                    title: { display: true, text: xAxis.label, color: '#888' },
-                    ticks: { color: '#666', maxTicksLimit: 10 },
-                    grid: { color: '#ffffff10' }
-                },
-                y: {
-                    title: { display: true, text: numericCols[0].replace(/^[^.]+\./, ''), color: '#888' },
-                    ticks: { color: '#666' },
-                    grid: { color: '#ffffff10' }
-                }
-            };
+            var yLabel = numericCols[0].replace(/^[^.]+\./, '');
+            var dualLabel = needsDualAxis && numericCols[1] ? numericCols[1].replace(/^[^.]+\./, '') : '';
 
-            if (needsDualAxis && datasets.length === 2) {
-                scales.y.position = 'left';
-                scales.y1 = {
-                    position: 'right',
-                    title: { display: true, text: numericCols[1].replace(/^[^.]+\./, ''), color: '#888' },
-                    ticks: { color: '#666' },
-                    grid: { drawOnChartArea: false }
-                };
-            }
-
-            charts[`chart-${chartCount}`] = new Chart(ctx, {
-                type: 'line',
-                data: { labels: xLabels, datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { labels: { color: '#ccc', boxWidth: 12 } },
-                        tooltip: { mode: 'index', intersect: false }
-                    },
-                    scales
-                }
-            });
-
+            charts[chartId] = createChart(chartId, xLabels, xAxis.label, datasets, yLabel, needsDualAxis, dualLabel);
             chartCount++;
-        }
+        });
 
-        // Handle any ungrouped numeric columns
-        const groupedCols = new Set();
-        for (const patterns of Object.values(SENSOR_GROUPS)) {
-            matchColumns(data.headers, patterns).forEach(c => groupedCols.add(c));
-        }
-        const ungrouped = data.headers.filter(h =>
-            !groupedCols.has(h) &&
-            h !== 'General.Entry' && h !== 'General.Time' &&
-            h !== 'System Info.SSID' && h !== 'System Info.Uptime' &&
-            data.rows.some(r => typeof r[h] === 'number')
-        );
+        // Ungrouped columns
+        var groupedCols = new Set();
+        Object.values(SENSOR_GROUPS).forEach(function(patterns) {
+            matchColumns(data.headers, patterns).forEach(function(c) { groupedCols.add(c); });
+        });
+        var ungrouped = data.headers.filter(function(h) {
+            return !groupedCols.has(h) &&
+                h !== 'General.Entry' && h !== 'General.Time' &&
+                h !== 'System Info.SSID' && h !== 'System Info.Uptime' &&
+                data.rows.some(function(r) { return typeof r[h] === 'number'; });
+        });
 
         if (ungrouped.length > 0) {
-            const card = document.createElement('div');
+            var chartId = 'chart-' + chartCount;
+            var card = document.createElement('div');
             card.className = 'chart-card';
-            card.innerHTML = `<h3>Other Sensors</h3><div class="chart-container"><canvas id="chart-${chartCount}"></canvas></div>`;
+            card.innerHTML = '<h3>Other Sensors</h3><div class="chart-container"><canvas id="' + chartId + '"></canvas></div>';
             dashboard.appendChild(card);
 
-            const ctx = document.getElementById(`chart-${chartCount}`).getContext('2d');
-            const xLabels = downsample(xAxis.labels, MAX_POINTS);
-
-            charts[`chart-${chartCount}`] = new Chart(ctx, {
-                type: 'line',
-                data: {
-                    labels: xLabels,
-                    datasets: ungrouped.map((col, i) => ({
-                        label: col,
-                        data: downsample(data.rows.map(r => r[col]), MAX_POINTS),
-                        borderColor: COLORS[i % COLORS.length],
-                        borderWidth: 1.5,
-                        pointRadius: 0,
-                        tension: 0.3
-                    }))
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: { legend: { labels: { color: '#ccc', boxWidth: 12 } } },
-                    scales: {
-                        x: { title: { display: true, text: xAxis.label, color: '#888' }, ticks: { color: '#666', maxTicksLimit: 10 }, grid: { color: '#ffffff10' } },
-                        y: { ticks: { color: '#666' }, grid: { color: '#ffffff10' } }
-                    }
-                }
+            var xLabels = downsample(xAxis.labels, MAX_POINTS);
+            var datasets = ungrouped.map(function(col, i) {
+                return {
+                    label: col,
+                    data: downsample(data.rows.map(function(r) { return r[col]; }), MAX_POINTS),
+                    borderColor: COLORS[i % COLORS.length],
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    tension: 0.3
+                };
             });
+
+            charts[chartId] = createChart(chartId, xLabels, xAxis.label, datasets, '', false, '');
         }
 
         if (chartCount === 0) {
@@ -409,153 +718,164 @@
         }
     }
 
-    // === Load a file (fetch or FileReader) ===
+    // === Load built-in file ===
     async function loadBuiltinFile(filename) {
         try {
             document.getElementById('dashboard').innerHTML = '<div class="loading">Loading...</div>';
-            const resp = await fetch(filename);
-            if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
-            const text = await resp.text();
-            const data = parseCSV(text);
+            var resp = await fetch(filename);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            var text = await resp.text();
+            var data = parseCSV(text);
             if (!data || data.rows.length === 0) throw new Error('No data found');
-            renderDashboard(data, filename);
+
+            rawParsedData = parseCSV(text);
+            currentFilename = filename;
+            currentMode = 'single';
+
+            var enriched = computeDerivedFields(data, getThresholds());
+            renderDashboard(enriched, filename);
         } catch (e) {
             document.getElementById('dashboard').innerHTML =
-                `<div class="error">Failed to load ${filename}: ${e.message}<br>
-                 <small>If opening locally, use a local server: <code>python3 -m http.server</code></small></div>`;
+                '<div class="error">Failed to load ' + filename + ': ' + e.message + '<br>' +
+                '<small>If opening locally, use a local server: <code>python3 -m http.server</code></small></div>';
         }
     }
 
     function loadUploadedFile(file) {
-        const reader = new FileReader();
-        reader.onload = () => {
-            const data = parseCSV(reader.result);
+        var reader = new FileReader();
+        reader.onload = function() {
+            var data = parseCSV(reader.result);
             if (!data || data.rows.length === 0) {
                 document.getElementById('dashboard').innerHTML =
-                    `<div class="error">No valid data found in ${file.name}</div>`;
+                    '<div class="error">No valid data found in ' + file.name + '</div>';
                 return;
             }
-            renderDashboard(data, file.name);
+            rawParsedData = parseCSV(reader.result);
+            currentFilename = file.name;
+            currentMode = 'single';
+
+            var enriched = computeDerivedFields(data, getThresholds());
+            renderDashboard(enriched, file.name);
         };
         reader.readAsText(file);
     }
 
-    // === Merge multiple datasets (union of headers, concatenated rows with source tag) ===
+    // === Merge datasets ===
     function mergeDatasets(filesData) {
-        // Collect union of all headers, preserving order
-        const headerSet = new Set();
-        const allHeaders = [];
-        for (const { headers } of filesData) {
-            for (const h of headers) {
+        var headerSet = new Set();
+        var allHeaders = [];
+        filesData.forEach(function(fd) {
+            fd.headers.forEach(function(h) {
                 if (!headerSet.has(h)) {
                     headerSet.add(h);
                     allHeaders.push(h);
                 }
-            }
-        }
+            });
+        });
 
-        // Concatenate rows, adding _source tag and null separator between files
-        const allRows = [];
-        for (const { rows, filename } of filesData) {
+        var allRows = [];
+        filesData.forEach(function(fd) {
             if (allRows.length > 0) {
-                // Insert a null gap row to visually separate files
-                const gap = { _source: GAP_MARKER };
-                allHeaders.forEach(h => gap[h] = null);
+                var gap = { _source: GAP_MARKER };
+                allHeaders.forEach(function(h) { gap[h] = null; });
                 allRows.push(gap);
             }
-            for (const row of rows) {
-                allRows.push({ ...row, _source: filename });
-            }
-        }
+            fd.rows.forEach(function(row) {
+                allRows.push(Object.assign({}, row, { _source: fd.filename }));
+            });
+        });
 
-        return { headers: allHeaders, rows: allRows, fileNames: filesData.map(f => f.filename) };
+        return { headers: allHeaders, rows: allRows, fileNames: filesData.map(function(f) { return f.filename; }) };
     }
 
-    // === Load all built-in files combined ===
+    // === Load all files combined ===
     async function loadAllFiles() {
         try {
             document.getElementById('dashboard').innerHTML = '<div class="loading">Loading all files...</div>';
-            const filesData = [];
-            for (const f of BUILTIN_FILES) {
-                const resp = await fetch(f);
+            var filesData = [];
+            for (var i = 0; i < BUILTIN_FILES.length; i++) {
+                var f = BUILTIN_FILES[i];
+                var resp = await fetch(f);
                 if (!resp.ok) continue;
-                const text = await resp.text();
-                const data = parseCSV(text);
+                var text = await resp.text();
+                var data = parseCSV(text);
                 if (data && data.rows.length > 0) {
-                    filesData.push({ headers: data.headers, rows: data.rows, filename: f });
+                    var enriched = computeDerivedFields(data, getThresholds());
+                    filesData.push({ headers: enriched.headers, rows: enriched.rows, filename: f });
                 }
             }
             if (filesData.length === 0) throw new Error('No files loaded');
-            const merged = mergeDatasets(filesData);
+
+            currentMode = 'combined';
+            var merged = mergeDatasets(filesData);
             renderCombinedDashboard(merged);
         } catch (e) {
             document.getElementById('dashboard').innerHTML =
-                `<div class="error">Failed to load files: ${e.message}<br>
-                 <small>If opening locally, use a local server: <code>python3 -m http.server</code></small></div>`;
+                '<div class="error">Failed to load files: ' + e.message + '<br>' +
+                '<small>If opening locally, use a local server: <code>python3 -m http.server</code></small></div>';
         }
     }
 
-    // === Render combined stats ===
+    // === Combined stats ===
     function renderCombinedStats(merged) {
-        const bar = document.getElementById('stats-bar');
-        const realRows = merged.rows.filter(r => r._source !== GAP_MARKER);
-        const numericCols = merged.headers.filter(h =>
-            realRows.some(r => typeof r[h] === 'number')
-        );
+        var bar = document.getElementById('stats-bar');
+        var realRows = merged.rows.filter(function(r) { return r._source !== GAP_MARKER; });
+        var numericCols = merged.headers.filter(function(h) {
+            return realRows.some(function(r) { return typeof r[h] === 'number'; });
+        });
 
-        let html = `<div class="stat"><div class="stat-value">All Files</div><div class="stat-label">${merged.fileNames.length} files combined</div></div>`;
-        html += `<div class="stat"><div class="stat-value">${realRows.length.toLocaleString()}</div><div class="stat-label">Total Data Points</div></div>`;
-        html += `<div class="stat"><div class="stat-value">${merged.headers.length}</div><div class="stat-label">Unique Columns</div></div>`;
-        html += `<div class="stat"><div class="stat-value">${numericCols.length}</div><div class="stat-label">Numeric Sensors</div></div>`;
+        var html = '<div class="stat"><div class="stat-value">All Files</div><div class="stat-label">' + merged.fileNames.length + ' files combined</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + realRows.length.toLocaleString() + '</div><div class="stat-label">Total Data Points</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + merged.headers.length + '</div><div class="stat-label">Unique Columns</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + numericCols.length + '</div><div class="stat-label">Numeric Sensors</div></div>';
 
         bar.innerHTML = html;
     }
 
-    // === Render combined dashboard (multi-file, per-file colored series) ===
+    // === Combined dashboard ===
     function renderCombinedDashboard(merged) {
-        Object.values(charts).forEach(c => c.destroy());
+        Object.values(charts).forEach(function(c) { c.destroy(); });
         charts = {};
         currentData = merged;
 
         renderCombinedStats(merged);
+        document.getElementById('zoom-hint').style.display = 'block';
 
-        const dashboard = document.getElementById('dashboard');
+        var dashboard = document.getElementById('dashboard');
         dashboard.innerHTML = '';
 
-        const MAX_POINTS = 2000;
-        let chartCount = 0;
+        var MAX_POINTS = 2000;
+        var chartCount = 0;
 
-        for (const [groupName, patterns] of Object.entries(SENSOR_GROUPS)) {
-            const cols = matchColumns(merged.headers, patterns);
-            if (cols.length === 0) continue;
+        Object.entries(SENSOR_GROUPS).forEach(function(entry) {
+            var groupName = entry[0];
+            var patterns = entry[1];
+            var cols = matchColumns(merged.headers, patterns);
+            if (cols.length === 0) return;
 
-            const numericCols = cols.filter(c =>
-                merged.rows.some(r => typeof r[c] === 'number')
-            );
-            if (numericCols.length === 0) continue;
+            var numericCols = cols.filter(function(c) {
+                return merged.rows.some(function(r) { return typeof r[c] === 'number'; });
+            });
+            if (numericCols.length === 0) return;
 
-            const card = document.createElement('div');
+            var chartId = 'chart-' + chartCount;
+            var card = document.createElement('div');
             card.className = 'chart-card';
-            card.innerHTML = `<h3>${groupName}</h3><div class="chart-container"><canvas id="chart-${chartCount}"></canvas></div>`;
+            card.innerHTML = '<h3>' + groupName + '</h3><div class="chart-container"><canvas id="' + chartId + '"></canvas></div>';
             dashboard.appendChild(card);
 
-            const ctx = document.getElementById(`chart-${chartCount}`).getContext('2d');
-
-            // Build one dataset per (column × file) combination
-            const datasets = [];
-            numericCols.forEach((col) => {
-                merged.fileNames.forEach((fname, fi) => {
-                    // Extract only this file's data for this column, with nulls elsewhere
-                    const seriesData = merged.rows.map(r => {
+            var datasets = [];
+            numericCols.forEach(function(col) {
+                merged.fileNames.forEach(function(fname, fi) {
+                    var seriesData = merged.rows.map(function(r) {
                         if (r._source === fname && typeof r[col] === 'number') return r[col];
                         return null;
                     });
-                    // Skip if this file has no data for this column
-                    if (seriesData.every(v => v === null)) return;
+                    if (seriesData.every(function(v) { return v === null; })) return;
 
-                    const shortCol = col.replace(/^[^.]+\./, '');
+                    var shortCol = col.replace(/^[^.]+\./, '');
                     datasets.push({
-                        label: `${shortCol} (${fname})`,
+                        label: shortCol + ' (' + fname + ')',
                         data: downsample(seriesData, MAX_POINTS),
                         borderColor: FILE_COLORS[fi % FILE_COLORS.length],
                         backgroundColor: FILE_COLORS[fi % FILE_COLORS.length] + '20',
@@ -567,76 +887,64 @@
                 });
             });
 
-            if (datasets.length === 0) continue;
+            if (datasets.length === 0) return;
 
-            const xLabels = downsample(merged.rows.map((_, i) => i + 1), MAX_POINTS);
-
-            charts[`chart-${chartCount}`] = new Chart(ctx, {
-                type: 'line',
-                data: { labels: xLabels, datasets },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    animation: false,
-                    interaction: { mode: 'index', intersect: false },
-                    plugins: {
-                        legend: { labels: { color: '#ccc', boxWidth: 12 } },
-                        tooltip: { mode: 'index', intersect: false }
-                    },
-                    scales: {
-                        x: {
-                            title: { display: true, text: 'Sample #', color: '#888' },
-                            ticks: { color: '#666', maxTicksLimit: 10 },
-                            grid: { color: '#ffffff10' }
-                        },
-                        y: {
-                            title: { display: true, text: numericCols[0].replace(/^[^.]+\./, ''), color: '#888' },
-                            ticks: { color: '#666' },
-                            grid: { color: '#ffffff10' }
-                        }
-                    }
-                }
-            });
+            var xLabels = downsample(merged.rows.map(function(_, i) { return i + 1; }), MAX_POINTS);
+            charts[chartId] = createChart(chartId, xLabels, 'Sample #', datasets,
+                numericCols[0].replace(/^[^.]+\./, ''), false, '');
             chartCount++;
-        }
+        });
 
         if (chartCount === 0) {
             dashboard.innerHTML = '<div class="error">No numeric sensor data found.</div>';
         }
     }
 
-    // === Initialize controls ===
+    // === Initialize ===
     function init() {
-        const controls = document.getElementById('controls');
+        var controls = document.getElementById('controls');
 
-        // Add "All Files" button first
-        const allBtn = document.createElement('button');
+        var allBtn = document.createElement('button');
         allBtn.className = 'file-btn load-all';
-        allBtn.textContent = '📊 All Files';
-        allBtn.onclick = () => {
-            document.querySelectorAll('.file-btn').forEach(b => b.classList.remove('active'));
+        allBtn.textContent = '\uD83D\uDCCA All Files';
+        allBtn.onclick = function() {
+            document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
             allBtn.classList.add('active');
             loadAllFiles();
         };
         controls.insertBefore(allBtn, controls.firstChild);
 
-        BUILTIN_FILES.forEach(f => {
-            const btn = document.createElement('button');
+        BUILTIN_FILES.forEach(function(f) {
+            var btn = document.createElement('button');
             btn.className = 'file-btn';
             btn.textContent = f;
-            btn.onclick = () => {
-                document.querySelectorAll('.file-btn').forEach(b => b.classList.remove('active'));
+            btn.onclick = function() {
+                document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
                 btn.classList.add('active');
                 loadBuiltinFile(f);
             };
             controls.insertBefore(btn, controls.firstChild);
         });
 
-        // File upload handler
-        document.getElementById('file-upload').addEventListener('change', (e) => {
+        document.getElementById('file-upload').addEventListener('change', function(e) {
             if (e.target.files.length > 0) {
-                document.querySelectorAll('.file-btn').forEach(b => b.classList.remove('active'));
+                document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
                 loadUploadedFile(e.target.files[0]);
+            }
+        });
+
+        document.getElementById('settings-toggle').addEventListener('click', function() {
+            document.getElementById('settings-toggle').classList.toggle('open');
+            document.getElementById('settings-body').classList.toggle('open');
+        });
+
+        document.getElementById('btn-apply-settings').addEventListener('click', function() {
+            if (currentMode === 'combined') {
+                loadAllFiles();
+            } else if (rawParsedData && currentFilename) {
+                var freshData = { headers: rawParsedData.headers.slice(), rows: rawParsedData.rows.map(function(r) { return Object.assign({}, r); }) };
+                var enriched = computeDerivedFields(freshData, getThresholds());
+                renderDashboard(enriched, currentFilename);
             }
         });
     }
