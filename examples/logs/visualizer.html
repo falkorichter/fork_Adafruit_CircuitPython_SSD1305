@@ -1,0 +1,1709 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sensor Log Visualizer</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
+    <script src="https://cdn.jsdelivr.net/npm/hammerjs@2"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
+    <style>
+        :root {
+            --bg: #1a1a2e;
+            --surface: #16213e;
+            --border: #0f3460;
+            --text: #e0e0e0;
+            --accent: #e94560;
+            --accent2: #0f3460;
+        }
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg);
+            color: var(--text);
+            padding: 20px;
+        }
+        h1 { text-align: center; margin-bottom: 10px; color: #fff; }
+        .subtitle { text-align: center; color: #888; margin-bottom: 20px; font-size: 0.9em; }
+        .controls {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            justify-content: center;
+            margin-bottom: 20px;
+            align-items: center;
+        }
+        .file-btn {
+            padding: 8px 16px;
+            border: 2px solid var(--border);
+            background: var(--surface);
+            color: var(--text);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+        .file-btn:hover { border-color: var(--accent); }
+        .file-btn.active { background: var(--accent); border-color: var(--accent); color: #fff; }
+        .file-btn.load-all { background: var(--accent2); border-color: var(--accent); }
+        .file-btn.load-all.active { background: var(--accent); }
+        .upload-btn {
+            padding: 8px 16px;
+            border: 2px dashed var(--border);
+            background: var(--surface);
+            color: var(--text);
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+            transition: all 0.2s;
+        }
+        .upload-btn:hover { border-color: var(--accent); }
+        #file-upload { display: none; }
+        .stats-bar {
+            display: flex;
+            justify-content: center;
+            gap: 20px;
+            margin-bottom: 20px;
+            flex-wrap: wrap;
+        }
+        .stat {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 6px;
+            padding: 8px 16px;
+            text-align: center;
+        }
+        .stat-value { font-size: 1.4em; font-weight: bold; color: var(--accent); }
+        .stat-label { font-size: 0.75em; color: #888; }
+        .settings-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .settings-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            cursor: pointer;
+            user-select: none;
+            color: #ccc;
+            font-size: 0.95em;
+        }
+        .settings-toggle:hover { background: #1a2745; }
+        .settings-toggle .arrow { transition: transform 0.2s; }
+        .settings-toggle.open .arrow { transform: rotate(90deg); }
+        .settings-body {
+            display: none;
+            padding: 16px;
+            border-top: 1px solid var(--border);
+        }
+        .settings-body.open { display: block; }
+        .settings-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+            gap: 12px;
+        }
+        .setting-group h4 {
+            color: var(--accent);
+            font-size: 0.85em;
+            margin-bottom: 8px;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+        }
+        .setting-row {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 6px;
+        }
+        .setting-row label { font-size: 0.85em; color: #aaa; }
+        .setting-row input {
+            width: 90px;
+            padding: 4px 8px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 4px;
+            text-align: right;
+            font-size: 0.85em;
+        }
+        .setting-row input:focus { border-color: var(--accent); outline: none; }
+        .btn-apply {
+            margin-top: 12px;
+            padding: 8px 24px;
+            background: var(--accent);
+            border: none;
+            color: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.9em;
+        }
+        .btn-apply:hover { opacity: 0.9; }
+        .zoom-hint {
+            text-align: center;
+            color: #666;
+            font-size: 0.8em;
+            margin-bottom: 10px;
+        }
+        .logger-panel {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            margin-bottom: 20px;
+            overflow: hidden;
+        }
+        .logger-toggle {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 10px 16px;
+            cursor: pointer;
+            user-select: none;
+            color: #ccc;
+            font-size: 0.95em;
+        }
+        .logger-toggle:hover { background: #1a2745; }
+        .logger-toggle .arrow { transition: transform 0.2s; }
+        .logger-toggle.open .arrow { transform: rotate(90deg); }
+        .logger-body {
+            display: none;
+            padding: 16px;
+            border-top: 1px solid var(--border);
+        }
+        .logger-body.open { display: block; }
+        .logger-url-row {
+            display: flex;
+            gap: 8px;
+            margin-bottom: 12px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .logger-url-row label { font-size: 0.85em; color: #aaa; white-space: nowrap; }
+        .logger-url-row input[type="text"] {
+            flex: 1;
+            min-width: 200px;
+            padding: 6px 10px;
+            background: var(--bg);
+            border: 1px solid var(--border);
+            color: var(--text);
+            border-radius: 4px;
+            font-size: 0.9em;
+        }
+        .logger-url-row input[type="text"]:focus { border-color: var(--accent); outline: none; }
+        .btn-connect {
+            padding: 6px 16px;
+            background: var(--accent);
+            border: none;
+            color: #fff;
+            border-radius: 6px;
+            cursor: pointer;
+            font-size: 0.85em;
+            white-space: nowrap;
+        }
+        .btn-connect:hover { opacity: 0.9; }
+        .btn-connect:disabled { opacity: 0.5; cursor: not-allowed; }
+        .logger-status {
+            font-size: 0.85em;
+            color: #888;
+            margin-bottom: 10px;
+        }
+        .logger-status.error { color: var(--accent); }
+        .logger-status.success { color: #7ed321; }
+        .logger-file-list {
+            max-height: 300px;
+            overflow-y: auto;
+            margin-bottom: 12px;
+        }
+        .logger-file-item {
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            padding: 6px 8px;
+            border-bottom: 1px solid #ffffff08;
+            font-size: 0.85em;
+        }
+        .logger-file-item:hover { background: #1a2745; }
+        .logger-file-item input[type="checkbox"] { accent-color: var(--accent); }
+        .logger-file-item .fname { flex: 1; color: var(--text); }
+        .logger-file-item .fsize { color: #888; min-width: 80px; text-align: right; }
+        .logger-file-item .fdate { color: #666; min-width: 120px; text-align: right; }
+        .logger-actions {
+            display: flex;
+            gap: 8px;
+            align-items: center;
+            flex-wrap: wrap;
+        }
+        .btn-select-all {
+            padding: 4px 12px;
+            background: transparent;
+            border: 1px solid var(--border);
+            color: #aaa;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 0.8em;
+        }
+        .btn-select-all:hover { border-color: var(--accent); color: var(--text); }
+        .dashboard {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(500px, 1fr));
+            gap: 16px;
+        }
+        .chart-card {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 16px;
+            position: relative;
+        }
+        .chart-card h3 {
+            margin-bottom: 10px;
+            font-size: 0.95em;
+            color: #ccc;
+        }
+        .chart-container {
+            position: relative;
+            height: 280px;
+        }
+        .btn-fullscreen {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: #aaa;
+            cursor: pointer;
+            font-size: 1.1em;
+            padding: 4px 8px;
+            border-radius: 4px;
+            z-index: 10;
+            line-height: 1;
+        }
+        .btn-fullscreen:hover { color: #fff; border-color: var(--accent); }
+        .chart-card.fullscreen {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            z-index: 9999;
+            border-radius: 0;
+            margin: 0;
+            padding: 24px;
+            overflow: auto;
+        }
+        .chart-card.fullscreen .chart-container {
+            height: calc(100vh - 80px);
+        }
+        .chart-card.fullscreen .btn-fullscreen {
+            top: 16px; right: 16px; font-size: 1.3em;
+        }
+        .chart-nav-toolbar {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .chart-card.fullscreen .chart-nav-toolbar { display: flex; }
+        .chart-nav-btn {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: #ccc;
+            cursor: pointer;
+            font-size: 1.1em;
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            user-select: none;
+        }
+        .chart-nav-btn:hover { color: #fff; border-color: var(--accent); }
+        .chart-nav-btn:active { background: var(--accent); }
+        .chart-nav-sep { width: 12px; }
+        .chart-nav-hint {
+            font-size: 0.75em;
+            color: #666;
+            margin-left: 12px;
+        }
+        .loading {
+            text-align: center;
+            padding: 60px;
+            color: #888;
+            font-size: 1.2em;
+        }
+        .error { color: var(--accent); text-align: center; padding: 20px; }
+        @media (max-width: 600px) {
+            .dashboard { grid-template-columns: 1fr; }
+            .chart-container { height: 220px; }
+            .settings-grid { grid-template-columns: 1fr; }
+        }
+    </style>
+</head>
+<body>
+    <h1>📊 Sensor Log Visualizer</h1>
+    <p class="subtitle">SparkFun DataLogger CSV Log Dashboard</p>
+
+    <div class="controls" id="controls">
+        <label class="upload-btn" for="file-upload">📁 Upload CSV/TXT files</label>
+        <input type="file" id="file-upload" accept=".txt,.csv" multiple>
+        <button id="btn-clear-data" class="upload-btn" style="display:none;background:#c0392b;border-color:#e74c3c;cursor:pointer;" title="Clear all loaded data">🗑️ Clear All</button>
+    </div>
+
+    <div class="logger-panel" id="logger-panel">
+        <div class="logger-toggle" id="logger-toggle">
+            <span>📡 Download from DataLogger</span>
+            <span class="arrow">▶</span>
+        </div>
+        <div class="logger-body" id="logger-body">
+            <div class="logger-url-row">
+                <label>Logger URL:</label>
+                <input type="text" id="logger-url" placeholder="http://datalogger5b7a0.local" value="http://datalogger5b7a0.local">
+                <button class="btn-connect" id="btn-connect">Connect</button>
+            </div>
+            <div class="logger-status" id="logger-status"></div>
+            <div class="logger-file-list" id="logger-file-list"></div>
+            <div class="logger-actions" id="logger-actions" style="display:none">
+                <button class="btn-select-all" id="btn-select-all">Select All</button>
+                <button class="btn-connect" id="btn-download-selected">Download &amp; Visualize Selected</button>
+                <span id="logger-dl-status" style="font-size:0.85em;color:#888"></span>
+            </div>
+        </div>
+    </div>
+
+    <div class="settings-panel" id="settings-panel">
+        <div class="settings-toggle" id="settings-toggle">
+            <span>⚙️ Calculated Fields &amp; Thresholds</span>
+            <span class="arrow">▶</span>
+        </div>
+        <div class="settings-body" id="settings-body">
+            <div class="settings-grid">
+                <div class="setting-group">
+                    <h4>🕐 Time Offset</h4>
+                    <div class="setting-row">
+                        <label>Offset (hours)</label>
+                        <div style="display:flex;align-items:center;gap:6px">
+                            <button type="button" onclick="document.getElementById('cfg-tz-offset').stepDown();updateTzLabel()" style="padding:2px 8px;cursor:pointer">−</button>
+                            <input type="number" id="cfg-tz-offset" value="0" step="1" min="-12" max="14" style="width:60px;text-align:center">
+                            <button type="button" onclick="document.getElementById('cfg-tz-offset').stepUp();updateTzLabel()" style="padding:2px 8px;cursor:pointer">+</button>
+                            <span id="tz-label" style="color:#94a3b8;font-size:12px">UTC±0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <h4>🧍 Person Detection (STHS34PF80)</h4>
+                    <div class="setting-row">
+                        <label>Presence threshold</label>
+                        <input type="number" id="cfg-presence-threshold" value="1000" step="100">
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <h4>🌬️ Air Quality (BME680)</h4>
+                    <div class="setting-row">
+                        <label>Humidity baseline (%)</label>
+                        <input type="number" id="cfg-hum-baseline" value="40" step="1">
+                    </div>
+                    <div class="setting-row">
+                        <label>Humidity weighting</label>
+                        <input type="number" id="cfg-hum-weighting" value="0.25" step="0.05" min="0" max="1">
+                    </div>
+                    <div class="setting-row">
+                        <label>Burn-in samples</label>
+                        <input type="number" id="cfg-gas-burnin" value="20" step="5" min="1">
+                    </div>
+                </div>
+                <div class="setting-group">
+                    <h4>🧲 Magnet Detection (MMC5983)</h4>
+                    <div class="setting-row">
+                        <label>Detection sigma</label>
+                        <input type="number" id="cfg-mag-detect-sigma" value="5.0" step="0.5" min="0.5">
+                    </div>
+                    <div class="setting-row">
+                        <label>Release sigma</label>
+                        <input type="number" id="cfg-mag-release-sigma" value="3.0" step="0.5" min="0.5">
+                    </div>
+                    <div class="setting-row">
+                        <label>Baseline samples</label>
+                        <input type="number" id="cfg-mag-baseline-samples" value="50" step="5" min="5">
+                    </div>
+                    <div class="setting-row">
+                        <label>Min calibration samples</label>
+                        <input type="number" id="cfg-mag-min-samples" value="10" step="1" min="3">
+                    </div>
+                </div>
+            </div>
+            <button class="btn-apply" id="btn-apply-settings">Apply &amp; Recalculate</button>
+        </div>
+    </div>
+
+    <div class="stats-bar" id="stats-bar"></div>
+    <div class="zoom-hint" id="zoom-hint" style="display:none">🔍 Scroll to zoom · Drag to pan · Double-click to reset · Keyboard: ← → pan · + − zoom · Home reset · <strong>Zoom syncs across all charts</strong></div>
+    <div id="dashboard" class="dashboard">
+        <div class="loading" id="loading">Select a log file above or upload your own CSV/TXT files to get started.</div>
+    </div>
+
+    <script>
+    // === Configuration ===
+    const BUILTIN_FILES = [
+        'sfe0001.txt', 'sfe0002.txt', 'sfe0003.txt',
+        'sfe0005.txt', 'sfe0006.txt', 'sfe0009.txt'
+    ];
+
+    const SENSOR_GROUPS = {
+        'Temperature': ['TMP117.Temperature', 'BME68x.TemperatureC', 'MMC5983.Temperature', 'STHS34PF80.Temperature'],
+        'Light': ['VEML7700.Ambient Light', 'VEML7700.Lux', 'VEML7700.White', 'VEML6075.UVA', 'VEML6075.UVB', 'VEML6075.UV Index'],
+        'Humidity & Pressure': ['BME68x.Humidity', 'BME68x.Pressure'],
+        'Air Quality (Gas)': ['BME68x.Gas Resistance', 'BME68x.Sensor Status'],
+        'Air Quality Score (calculated)': ['_calc.Air Quality'],
+        'Battery': ['MAX17048.Voltage', 'MAX17048.State Of Charge', 'MAX17048.Change Rate'],
+        'Magnetic Field': ['MMC5983.X Field', 'MMC5983.Y Field', 'MMC5983.Z Field'],
+        'Magnet Detection (calculated)': ['_calc.Mag Magnitude', '_calc.Mag Baseline', '_calc.Mag Z-Score', '_calc.Magnet Detected'],
+        'Presence & Motion': ['STHS34PF80.Presence', 'STHS34PF80.Motion'],
+        'Person Present (calculated)': ['_calc.Person Present'],
+        'System': ['System Info.RSSI', 'System Info.Uptime', 'System Info.Heap', 'System Info.SD Free']
+    };
+
+    const COLORS = [
+        '#e94560', '#0f3460', '#53d8fb', '#f5a623',
+        '#7ed321', '#bd10e0', '#4a90d9', '#50e3c2',
+        '#ff6b6b', '#c0c0c0'
+    ];
+
+    const FILE_COLORS = [
+        '#e94560', '#53d8fb', '#f5a623', '#7ed321',
+        '#bd10e0', '#50e3c2', '#ff6b6b', '#4a90d9'
+    ];
+    const GAP_MARKER = '__gap__';
+    const MAD_SCALE_FACTOR = 1.4826;
+    const MIN_SIGMA = 0.005;
+
+    // === State ===
+    let charts = {};
+    let currentData = null;
+    let currentFilename = null;
+    let currentMode = 'single';
+    let rawParsedData = null;
+    let combinedFilesData = [];  // accumulated {headers, rows, filename} objects (enriched)
+    let combinedRawFilesData = [];  // accumulated {headers, rows, filename} objects (raw, pre-derived)
+
+    // === Timezone offset ===
+    function getTzOffsetMs() {
+        return (parseFloat(document.getElementById('cfg-tz-offset').value) || 0) * 3600000;
+    }
+    function applyTzOffset(isoStr) {
+        if (!isoStr || typeof isoStr !== 'string') return isoStr;
+        const offsetMs = getTzOffsetMs();
+        if (offsetMs === 0) return isoStr;
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        return new Date(d.getTime() + offsetMs).toISOString().replace('Z', '');
+    }
+    function updateTzLabel() {
+        const h = parseFloat(document.getElementById('cfg-tz-offset').value) || 0;
+        const sign = h >= 0 ? '+' : '';
+        document.getElementById('tz-label').textContent = 'UTC' + sign + h;
+    }
+
+    // === Read thresholds from UI ===
+    function getThresholds() {
+        return {
+            presenceThreshold: parseFloat(document.getElementById('cfg-presence-threshold').value) || 1000,
+            humBaseline: parseFloat(document.getElementById('cfg-hum-baseline').value) || 40,
+            humWeighting: parseFloat(document.getElementById('cfg-hum-weighting').value) || 0.25,
+            gasBurnin: parseInt(document.getElementById('cfg-gas-burnin').value) || 20,
+            magDetectSigma: parseFloat(document.getElementById('cfg-mag-detect-sigma').value) || 5.0,
+            magReleaseSigma: parseFloat(document.getElementById('cfg-mag-release-sigma').value) || 3.0,
+            magBaselineSamples: parseInt(document.getElementById('cfg-mag-baseline-samples').value) || 50,
+            magMinSamples: parseInt(document.getElementById('cfg-mag-min-samples').value) || 10
+        };
+    }
+
+    // === CSV Parser ===
+    function parseCSV(text) {
+        // Strip null bytes (SparkFun DataLogger embeds \0 at end of each line)
+        const lines = text.replace(/\0/g, '').trim().split('\n').filter(l => l.trim());
+        if (lines.length < 2) return null;
+
+        const headers = lines[0].split(',').map(h => h.trim()).filter(h => h);
+        const rows = [];
+
+        for (let i = 1; i < lines.length; i++) {
+            const values = lines[i].split(',').map(v => v.trim());
+            // Accept rows with at least as many columns as headers (trailing commas ok)
+            if (values.length < headers.length) continue;
+            const row = {};
+            headers.forEach((h, idx) => {
+                const v = values[idx];
+                // Use Number() instead of parseFloat() so '2026-02-08T05:29:32'
+                // stays a string (parseFloat would return 2026)
+                const num = v === '' ? NaN : Number(v);
+                row[h] = isNaN(num) ? v : num;
+            });
+            rows.push(row);
+        }
+
+        return { headers, rows };
+    }
+
+    // === Statistics helpers ===
+    function calcMedian(arr) {
+        const s = [...arr].sort((a, b) => a - b);
+        const n = s.length;
+        const mid = Math.floor(n / 2);
+        return n % 2 === 0 ? (s[mid - 1] + s[mid]) / 2.0 : s[mid];
+    }
+
+    function calcMAD(arr, med) {
+        const devs = arr.map(x => Math.abs(x - med));
+        return calcMedian(devs);
+    }
+
+    // === Compute calculated/derived fields ===
+    function computeDerivedFields(data, thresholds) {
+        const t = thresholds;
+        const newHeaders = [...data.headers];
+        const addedHeaders = new Set();
+
+        const hasPresence = data.headers.some(h => h.startsWith('STHS34PF80.Presence'));
+        const hasMotion = data.headers.some(h => h.startsWith('STHS34PF80.Motion'));
+        const hasGas = data.headers.some(h => h.startsWith('BME68x.Gas Resistance'));
+        const hasHumidity = data.headers.some(h => h.startsWith('BME68x.Humidity'));
+        const hasMagX = data.headers.some(h => h.startsWith('MMC5983.X Field'));
+        const hasMagY = data.headers.some(h => h.startsWith('MMC5983.Y Field'));
+        const hasMagZ = data.headers.some(h => h.startsWith('MMC5983.Z Field'));
+
+        const presenceCol = data.headers.find(h => h.startsWith('STHS34PF80.Presence'));
+        const motionCol = data.headers.find(h => h.startsWith('STHS34PF80.Motion'));
+        const gasCol = data.headers.find(h => h.startsWith('BME68x.Gas Resistance'));
+        const humCol = data.headers.find(h => h.startsWith('BME68x.Humidity'));
+        const magXCol = data.headers.find(h => h.startsWith('MMC5983.X Field'));
+        const magYCol = data.headers.find(h => h.startsWith('MMC5983.Y Field'));
+        const magZCol = data.headers.find(h => h.startsWith('MMC5983.Z Field'));
+
+        function addHeader(h) {
+            if (!addedHeaders.has(h)) { addedHeaders.add(h); newHeaders.push(h); }
+        }
+
+        // --- Person Present ---
+        if (hasPresence || hasMotion) {
+            addHeader('_calc.Person Present');
+            for (const row of data.rows) {
+                const pv = hasPresence ? row[presenceCol] : null;
+                const mv = hasMotion ? row[motionCol] : null;
+                const presDetected = typeof pv === 'number' && pv >= t.presenceThreshold;
+                const motDetected = typeof mv === 'number' && mv > 0;
+                row['_calc.Person Present'] = (presDetected || motDetected) ? 1 : 0;
+            }
+        }
+
+        // --- Air Quality Score ---
+        if (hasGas && hasHumidity) {
+            addHeader('_calc.Air Quality');
+            addHeader('_calc.Gas Baseline');
+
+            const gasSamples = [];
+            for (const row of data.rows) {
+                const gas = row[gasCol];
+                const hum = row[humCol];
+
+                if (typeof gas !== 'number' || typeof hum !== 'number' || gas <= 0) {
+                    row['_calc.Air Quality'] = null;
+                    row['_calc.Gas Baseline'] = null;
+                    continue;
+                }
+
+                gasSamples.push(gas);
+                if (gasSamples.length > 50) gasSamples.shift();
+
+                if (gasSamples.length < t.gasBurnin) {
+                    row['_calc.Air Quality'] = null;
+                    row['_calc.Gas Baseline'] = null;
+                    continue;
+                }
+
+                const gasBaseline = gasSamples.reduce((a, b) => a + b, 0) / gasSamples.length;
+                const gasOffset = gasBaseline - gas;
+                const humOffset = hum - t.humBaseline;
+
+                let humScore;
+                if (humOffset > 0) {
+                    const denom = 100 - t.humBaseline;
+                    humScore = denom > 0 ? ((100 - t.humBaseline - humOffset) / denom) * (t.humWeighting * 100) : 0;
+                } else {
+                    humScore = t.humBaseline > 0 ? ((t.humBaseline + humOffset) / t.humBaseline) * (t.humWeighting * 100) : 0;
+                }
+
+                let gasScore;
+                if (gasOffset > 0 && gasBaseline > 0) {
+                    gasScore = (gas / gasBaseline) * (100 - t.humWeighting * 100);
+                } else {
+                    gasScore = 100 - t.humWeighting * 100;
+                }
+
+                row['_calc.Air Quality'] = Math.max(0, Math.min(100, humScore + gasScore));
+                row['_calc.Gas Baseline'] = gasBaseline;
+            }
+        }
+
+        // --- Magnetic Magnitude & Magnet Detection ---
+        if (hasMagX && hasMagY && hasMagZ) {
+            addHeader('_calc.Mag Magnitude');
+            addHeader('_calc.Mag Baseline');
+            addHeader('_calc.Mag Z-Score');
+            addHeader('_calc.Magnet Detected');
+
+            const cleanHistory = [];
+            let magDetected = false;
+
+            for (const row of data.rows) {
+                const x = row[magXCol];
+                const y = row[magYCol];
+                const z = row[magZCol];
+
+                if (typeof x !== 'number' || typeof y !== 'number' || typeof z !== 'number') {
+                    row['_calc.Mag Magnitude'] = null;
+                    row['_calc.Mag Baseline'] = null;
+                    row['_calc.Mag Z-Score'] = null;
+                    row['_calc.Magnet Detected'] = null;
+                    continue;
+                }
+
+                const magnitude = Math.sqrt(x * x + y * y + z * z);
+                row['_calc.Mag Magnitude'] = magnitude;
+
+                if (cleanHistory.length < t.magMinSamples) {
+                    cleanHistory.push(magnitude);
+                    if (cleanHistory.length > t.magBaselineSamples) cleanHistory.shift();
+                    row['_calc.Mag Baseline'] = calcMedian(cleanHistory);
+                    row['_calc.Mag Z-Score'] = 0;
+                    row['_calc.Magnet Detected'] = 0;
+                    continue;
+                }
+
+                const bl = calcMedian(cleanHistory);
+                const madVal = calcMAD(cleanHistory, bl);
+                const sigma = Math.max(madVal * MAD_SCALE_FACTOR, MIN_SIGMA);
+                const zScore = Math.abs(magnitude - bl) / sigma;
+
+                if (magDetected) {
+                    if (zScore < t.magReleaseSigma) {
+                        magDetected = false;
+                        cleanHistory.push(magnitude);
+                        if (cleanHistory.length > t.magBaselineSamples) cleanHistory.shift();
+                    }
+                } else {
+                    if (zScore > t.magDetectSigma) {
+                        magDetected = true;
+                    } else {
+                        cleanHistory.push(magnitude);
+                        if (cleanHistory.length > t.magBaselineSamples) cleanHistory.shift();
+                    }
+                }
+
+                row['_calc.Mag Baseline'] = bl;
+                row['_calc.Mag Z-Score'] = zScore;
+                row['_calc.Magnet Detected'] = magDetected ? 1 : 0;
+            }
+        }
+
+        return { headers: newHeaders, rows: data.rows };
+    }
+
+    // === Determine X-axis ===
+    function getXAxis(data) {
+        if (data.headers.includes('General.Time')) {
+            return {
+                type: 'time',
+                labels: data.rows.map(r => applyTzOffset(r['General.Time'])),
+                label: 'Time'
+            };
+        }
+        if (data.headers.includes('System Info.Uptime')) {
+            return {
+                type: 'linear',
+                labels: data.rows.map(r => (r['System Info.Uptime'] / 60000).toFixed(1)),
+                label: 'Uptime (min)'
+            };
+        }
+        return {
+            type: 'linear',
+            labels: data.rows.map((_, i) => i + 1),
+            label: 'Sample #'
+        };
+    }
+
+    function matchColumns(headers, patterns) {
+        return headers.filter(h => patterns.some(p => h.startsWith(p)));
+    }
+
+    function downsample(arr, maxPoints) {
+        if (arr.length <= maxPoints) return arr;
+        const step = arr.length / maxPoints;
+        const result = [];
+        for (let i = 0; i < maxPoints; i++) {
+            result.push(arr[Math.round(i * step)]);
+        }
+        return result;
+    }
+
+    function zoomPluginConfig() {
+        return {
+            pan: {
+                enabled: true,
+                mode: 'x',
+                threshold: 5,
+                onPanComplete: function(ctx) { syncZoomFromChart(ctx.chart); }
+            },
+            zoom: {
+                wheel: { enabled: true },
+                pinch: { enabled: true },
+                mode: 'x',
+                onZoomComplete: function(ctx) { syncZoomFromChart(ctx.chart); }
+            }
+        };
+    }
+
+    /** Read the current x-axis min/max from a chart and apply to all others */
+    function syncZoomFromChart(sourceChart) {
+        const sx = sourceChart.scales.x;
+        if (!sx) return;
+        const min = sx.min;
+        const max = sx.max;
+        Object.values(charts).forEach(function(c) {
+            if (c === sourceChart) return;
+            if (!c.scales || !c.scales.x) return;
+            c.scales.x.options.min = min;
+            c.scales.x.options.max = max;
+            c.update('none');
+        });
+    }
+
+    /** Reset zoom on ALL charts */
+    function resetAllZoom() {
+        Object.values(charts).forEach(function(c) {
+            c.resetZoom('none');
+        });
+    }
+
+    /** Programmatic zoom in/out on ALL charts */
+    function zoomAllCharts(factor) {
+        Object.values(charts).forEach(function(c) {
+            c.zoom(factor, 'none');
+        });
+        // Sync after zoom so all charts stay aligned
+        const first = Object.values(charts)[0];
+        if (first) syncZoomFromChart(first);
+    }
+
+    /** Programmatic pan ALL charts by a pixel delta */
+    function panAllCharts(deltaPixels) {
+        Object.values(charts).forEach(function(c) {
+            c.pan({ x: deltaPixels }, undefined, 'none');
+        });
+        const first = Object.values(charts)[0];
+        if (first) syncZoomFromChart(first);
+    }
+
+    // === Render Stats Bar ===
+    function renderStats(data, filename) {
+        const bar = document.getElementById('stats-bar');
+        const numericCols = data.headers.filter(h =>
+            data.rows.length > 0 && typeof data.rows[0][h] === 'number'
+        );
+
+        let html = '<div class="stat"><div class="stat-value">' + filename + '</div><div class="stat-label">File</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + data.rows.length.toLocaleString() + '</div><div class="stat-label">Data Points</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + data.headers.length + '</div><div class="stat-label">Columns</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + numericCols.length + '</div><div class="stat-label">Numeric Sensors</div></div>';
+
+        if (data.headers.includes('General.Time') && data.rows.length >= 2) {
+            const first = new Date(data.rows[0]['General.Time']);
+            const last = new Date(data.rows[data.rows.length - 1]['General.Time']);
+            if (!isNaN(first.getTime()) && !isNaN(last.getTime())) {
+                const mins = ((last - first) / 60000).toFixed(0);
+                html += '<div class="stat"><div class="stat-value">' + mins + ' min</div><div class="stat-label">Duration</div></div>';
+                const offsetH = parseFloat(document.getElementById('cfg-tz-offset').value) || 0;
+                if (offsetH !== 0) {
+                    const sign = offsetH >= 0 ? '+' : '';
+                    html += '<div class="stat"><div class="stat-value">UTC' + sign + offsetH + '</div><div class="stat-label">Time Offset</div></div>';
+                }
+            }
+        } else if (data.headers.includes('System Info.Uptime') && data.rows.length >= 2) {
+            const dur = (data.rows[data.rows.length - 1]['System Info.Uptime'] - data.rows[0]['System Info.Uptime']) / 60000;
+            html += '<div class="stat"><div class="stat-value">' + dur.toFixed(0) + ' min</div><div class="stat-label">Duration</div></div>';
+        }
+
+        bar.innerHTML = html;
+    }
+
+    // === Fullscreen toggle ===
+    function toggleFullscreen(btn) {
+        const card = btn.closest('.chart-card');
+        const isFS = card.classList.toggle('fullscreen');
+        btn.textContent = isFS ? '✕' : '⛶';
+        // Resize chart inside
+        const chartCanvas = card.querySelector('canvas');
+        if (chartCanvas && charts[chartCanvas.id]) {
+            charts[chartCanvas.id].resize();
+        }
+    }
+    document.addEventListener('keydown', function(e) {
+        if (e.key === 'Escape') {
+            const fs = document.querySelector('.chart-card.fullscreen');
+            if (fs) toggleFullscreen(fs.querySelector('.btn-fullscreen'));
+            return;
+        }
+        // Keyboard zoom/pan — active when any chart is fullscreen OR focus is not in an input
+        const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+        if (inInput) return;
+        if (Object.keys(charts).length === 0) return;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); panAllCharts(100); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); panAllCharts(-100); }
+        else if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomAllCharts(1.25); }
+        else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomAllCharts(0.8); }
+        else if (e.key === 'Home') { e.preventDefault(); resetAllZoom(); }
+    });
+
+    function createChartCard(dashboard, title, chartId) {
+        const card = document.createElement('div');
+        card.className = 'chart-card';
+        const btn = document.createElement('button');
+        btn.className = 'btn-fullscreen';
+        btn.textContent = '⛶';
+        btn.title = 'Toggle fullscreen';
+        btn.onclick = function() { toggleFullscreen(this); };
+        card.appendChild(btn);
+        const h3 = document.createElement('h3');
+        h3.textContent = title;
+        card.appendChild(h3);
+
+        // Navigation toolbar (visible in fullscreen)
+        const toolbar = document.createElement('div');
+        toolbar.className = 'chart-nav-toolbar';
+        [
+            { label: '◀', title: 'Pan left (←)', action: function() { panAllCharts(100); } },
+            { label: '−', title: 'Zoom out (−)', action: function() { zoomAllCharts(0.8); } },
+            { label: '⟳', title: 'Reset zoom (Home / double-click)', action: function() { resetAllZoom(); } },
+            { label: '+', title: 'Zoom in (+)', action: function() { zoomAllCharts(1.25); } },
+            { label: '▶', title: 'Pan right (→)', action: function() { panAllCharts(-100); } },
+        ].forEach(function(def) {
+            const b = document.createElement('button');
+            b.className = 'chart-nav-btn';
+            b.textContent = def.label;
+            b.title = def.title;
+            b.onclick = def.action;
+            toolbar.appendChild(b);
+        });
+        const hint = document.createElement('span');
+        hint.className = 'chart-nav-hint';
+        hint.textContent = 'Keyboard: ← → pan · + − zoom · Home reset · Synced across all charts';
+        toolbar.appendChild(hint);
+        card.appendChild(toolbar);
+
+        const container = document.createElement('div');
+        container.className = 'chart-container';
+        const canvas = document.createElement('canvas');
+        canvas.id = chartId;
+        container.appendChild(canvas);
+        card.appendChild(container);
+        dashboard.appendChild(card);
+        return card;
+    }
+
+    // === Create chart helper ===
+    function createChart(canvasId, xLabels, xLabel, datasets, yLabel, needsDualAxis, dualLabel) {
+        const ctx = document.getElementById(canvasId).getContext('2d');
+
+        // When xLabels is null, datasets use {x, y} format with time x-axis
+        const isTimeXY = (xLabels === null && xLabel === 'Time');
+
+        const scales = {
+            x: isTimeXY ? {
+                type: 'time',
+                time: { tooltipFormat: 'yyyy-MM-dd HH:mm:ss' },
+                title: { display: true, text: xLabel, color: '#888' },
+                ticks: { color: '#666', maxTicksLimit: 10 },
+                grid: { color: '#ffffff10' }
+            } : {
+                title: { display: true, text: xLabel, color: '#888' },
+                ticks: { color: '#666', maxTicksLimit: 10 },
+                grid: { color: '#ffffff10' }
+            },
+            y: {
+                title: { display: true, text: yLabel, color: '#888' },
+                ticks: { color: '#666' },
+                grid: { color: '#ffffff10' }
+            }
+        };
+
+        if (needsDualAxis) {
+            scales.y.position = 'left';
+            scales.y1 = {
+                position: 'right',
+                title: { display: true, text: dualLabel || '', color: '#888' },
+                ticks: { color: '#666' },
+                grid: { drawOnChartArea: false }
+            };
+        }
+
+        const chartData = isTimeXY
+            ? { datasets: datasets }
+            : { labels: xLabels, datasets: datasets };
+
+        return new Chart(ctx, {
+            type: 'line',
+            data: chartData,
+            options: {
+                responsive: true,
+                maintainAspectRatio: false,
+                animation: false,
+                interaction: { mode: 'index', intersect: false },
+                plugins: {
+                    legend: { labels: { color: '#ccc', boxWidth: 12 } },
+                    tooltip: { mode: 'index', intersect: false },
+                    zoom: zoomPluginConfig()
+                },
+                scales: scales
+            }
+        });
+    }
+
+    // === Render Dashboard (single file) ===
+    function renderDashboard(data, filename) {
+        Object.values(charts).forEach(function(c) { c.destroy(); });
+        charts = {};
+        currentData = data;
+
+        renderStats(data, filename);
+        document.getElementById('zoom-hint').style.display = 'block';
+
+        const dashboard = document.getElementById('dashboard');
+        dashboard.innerHTML = '';
+
+        const xAxis = getXAxis(data);
+        const MAX_POINTS = 1000;
+        let chartCount = 0;
+
+        Object.entries(SENSOR_GROUPS).forEach(function(entry) {
+            var groupName = entry[0];
+            var patterns = entry[1];
+            var cols = matchColumns(data.headers, patterns);
+            if (cols.length === 0) return;
+
+            var numericCols = cols.filter(function(c) {
+                return data.rows.some(function(r) { return typeof r[c] === 'number'; });
+            });
+            if (numericCols.length === 0) return;
+
+            var chartId = 'chart-' + chartCount;
+            createChartCard(dashboard, groupName, chartId);
+
+            var xLabels = downsample(xAxis.labels, MAX_POINTS);
+            var datasets = numericCols.map(function(col, i) {
+                var rawData = data.rows.map(function(r) { return r[col]; });
+                return {
+                    label: col.replace(/^[^.]+\./, ''),
+                    data: downsample(rawData, MAX_POINTS),
+                    borderColor: COLORS[i % COLORS.length],
+                    backgroundColor: COLORS[i % COLORS.length] + '20',
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    tension: 0.3,
+                    fill: numericCols.length === 1
+                };
+            });
+
+            var needsDualAxis = numericCols.length === 2 && (function() {
+                var maxes = numericCols.map(function(c) {
+                    var vals = data.rows.map(function(r) { return r[c]; }).filter(function(v) { return typeof v === 'number'; });
+                    return vals.length > 0 ? Math.max.apply(null, vals) : 0;
+                });
+                return maxes[0] > 0 && maxes[1] > 0 && (maxes[0] / maxes[1] > 10 || maxes[1] / maxes[0] > 10);
+            })();
+
+            if (needsDualAxis && datasets.length === 2) {
+                datasets[1].yAxisID = 'y1';
+            }
+
+            var yLabel = numericCols[0].replace(/^[^.]+\./, '');
+            var dualLabel = needsDualAxis && numericCols[1] ? numericCols[1].replace(/^[^.]+\./, '') : '';
+
+            charts[chartId] = createChart(chartId, xLabels, xAxis.label, datasets, yLabel, needsDualAxis, dualLabel);
+            chartCount++;
+        });
+
+        // Ungrouped columns
+        var groupedCols = new Set();
+        Object.values(SENSOR_GROUPS).forEach(function(patterns) {
+            matchColumns(data.headers, patterns).forEach(function(c) { groupedCols.add(c); });
+        });
+        var ungrouped = data.headers.filter(function(h) {
+            return !groupedCols.has(h) &&
+                h !== 'General.Entry' && h !== 'General.Time' && h !== 'General.Board ID' &&
+                h !== 'System Info.SSID' && h !== 'System Info.Uptime' &&
+                data.rows.some(function(r) { return typeof r[h] === 'number'; });
+        });
+
+        if (ungrouped.length > 0) {
+            var chartId = 'chart-' + chartCount;
+            createChartCard(dashboard, 'Other Sensors', chartId);
+
+            var xLabels = downsample(xAxis.labels, MAX_POINTS);
+            var datasets = ungrouped.map(function(col, i) {
+                return {
+                    label: col,
+                    data: downsample(data.rows.map(function(r) { return r[col]; }), MAX_POINTS),
+                    borderColor: COLORS[i % COLORS.length],
+                    borderWidth: 1.5,
+                    pointRadius: 0,
+                    tension: 0.3
+                };
+            });
+
+            charts[chartId] = createChart(chartId, xLabels, xAxis.label, datasets, '', false, '');
+        }
+
+        if (chartCount === 0) {
+            dashboard.innerHTML = '<div class="error">No numeric sensor data found in this file.</div>';
+        }
+    }
+
+    // === Load built-in file ===
+    async function loadBuiltinFile(filename) {
+        try {
+            document.getElementById('dashboard').innerHTML = '<div class="loading">Loading...</div>';
+            const resp = await fetch(filename);
+            if (!resp.ok) throw new Error('HTTP ' + resp.status);
+            const text = await resp.text();
+            const data = parseCSV(text);
+            if (!data || data.rows.length === 0) throw new Error('No data found');
+
+            const enriched = computeDerivedFields(data, getThresholds());
+            combinedRawFilesData = [{ headers: data.headers, rows: data.rows, filename: filename }];
+            combinedFilesData = [{ headers: enriched.headers, rows: enriched.rows, filename: filename }];
+            rawParsedData = parseCSV(text);
+            currentFilename = filename;
+            currentMode = 'single';
+            updateClearButton();
+
+            renderDashboard(enriched, filename);
+        } catch (e) {
+            document.getElementById('dashboard').innerHTML =
+                '<div class="error">Failed to load ' + filename + ': ' + e.message + '<br>' +
+                '<small>If opening locally, use a local server: <code>python3 -m http.server</code></small></div>';
+        }
+    }
+
+    function readFileAsText(file) {
+        return new Promise(function(resolve, reject) {
+            const reader = new FileReader();
+            reader.onload = function() { resolve(reader.result); };
+            reader.onerror = function() { reject(new Error('Failed to read ' + file.name)); };
+            reader.readAsText(file);
+        });
+    }
+
+    async function loadUploadedFiles(fileList) {
+        const files = Array.from(fileList);
+        const newRawEntries = [];
+        for (let i = 0; i < files.length; i++) {
+            const text = await readFileAsText(files[i]);
+            const data = parseCSV(text);
+            if (data && data.rows.length > 0) {
+                newRawEntries.push({ headers: data.headers, rows: data.rows, filename: files[i].name });
+            }
+        }
+        if (newRawEntries.length === 0) {
+            document.getElementById('dashboard').innerHTML =
+                '<div class="error">No valid data found in uploaded file(s).</div>';
+            return;
+        }
+        appendAndRender(newRawEntries);
+    }
+
+    /**
+     * Append raw (pre-derived) file entries and render.
+     * When multiple files are present, all rows are merged, sorted by time,
+     * and derived fields (air quality, magnet detection) are computed on
+     * the combined dataset so baselines carry across files.
+     */
+    function appendAndRender(newRawEntries) {
+        combinedRawFilesData = combinedRawFilesData.concat(newRawEntries);
+        updateClearButton();
+
+        if (combinedRawFilesData.length === 1) {
+            // Single file: compute derived fields directly
+            const fd = combinedRawFilesData[0];
+            const fresh = { headers: fd.headers.slice(), rows: fd.rows.map(function(r) { return Object.assign({}, r); }) };
+            const enriched = computeDerivedFields(fresh, getThresholds());
+            combinedFilesData = [{ headers: enriched.headers, rows: enriched.rows, filename: fd.filename }];
+            rawParsedData = { headers: fd.headers, rows: fd.rows };
+            currentFilename = fd.filename;
+            currentMode = 'single';
+            renderDashboard(enriched, fd.filename);
+        } else {
+            // Multiple files: merge all raw rows, sort by time, compute
+            // derived fields once so baselines (gas, magnet) carry across files
+            const allEnriched = enrichCombinedRawData(combinedRawFilesData, getThresholds());
+            combinedFilesData = allEnriched;
+            currentMode = 'combined';
+            const merged = mergeDatasets(allEnriched);
+            renderCombinedDashboard(merged);
+        }
+    }
+
+    /**
+     * Merge raw rows from all files, sort by time, compute derived fields
+     * on the combined dataset, then split back into per-file entries.
+     */
+    function enrichCombinedRawData(rawFilesData, thresholds) {
+        // Union headers
+        const headerSet = new Set();
+        const allHeaders = [];
+        rawFilesData.forEach(function(fd) {
+            fd.headers.forEach(function(h) {
+                if (!headerSet.has(h)) { headerSet.add(h); allHeaders.push(h); }
+            });
+        });
+
+        // Tag each row with its source file and merge
+        const taggedRows = [];
+        rawFilesData.forEach(function(fd) {
+            fd.rows.forEach(function(row) {
+                taggedRows.push(Object.assign({}, row, { _source: fd.filename }));
+            });
+        });
+
+        // Sort by General.Time if available; preserve original order as tiebreaker
+        const hasTime = allHeaders.includes('General.Time');
+        if (hasTime) {
+            taggedRows.forEach(function(r, i) { r._sortIdx = i; });
+            taggedRows.sort(function(a, b) {
+                const ta = new Date(a['General.Time']).getTime();
+                const tb = new Date(b['General.Time']).getTime();
+                if (!isNaN(ta) && !isNaN(tb)) return ta - tb || a._sortIdx - b._sortIdx;
+                return a._sortIdx - b._sortIdx;
+            });
+            taggedRows.forEach(function(r) { delete r._sortIdx; });
+        }
+
+        // Compute derived fields on the entire combined dataset
+        const combined = { headers: allHeaders, rows: taggedRows };
+        const enriched = computeDerivedFields(combined, thresholds);
+
+        // Split back into per-file entries
+        const byFile = {};
+        rawFilesData.forEach(function(fd) { byFile[fd.filename] = []; });
+        enriched.rows.forEach(function(row) {
+            const src = row._source;
+            if (byFile[src]) byFile[src].push(row);
+        });
+
+        return rawFilesData.map(function(fd) {
+            return { headers: enriched.headers, rows: byFile[fd.filename] || [], filename: fd.filename };
+        });
+    }
+
+    function clearAccumulatedData() {
+        combinedFilesData = [];
+        combinedRawFilesData = [];
+        currentData = null;
+        rawParsedData = null;
+        currentFilename = null;
+        currentMode = 'single';
+        Object.values(charts).forEach(function(c) { c.destroy(); });
+        charts = {};
+        document.getElementById('dashboard').innerHTML =
+            '<p style="color:#8899aa;text-align:center;margin-top:80px;">Select a log file above or upload your own CSV/TXT files to get started.</p>';
+        document.getElementById('stats-bar').innerHTML = '';
+        document.getElementById('zoom-hint').style.display = 'none';
+        updateClearButton();
+    }
+
+    function updateClearButton() {
+        const btn = document.getElementById('btn-clear-data');
+        if (btn) btn.style.display = combinedFilesData.length > 0 ? 'inline-block' : 'none';
+    }
+
+    // === Merge datasets ===
+    function mergeDatasets(filesData) {
+        var headerSet = new Set();
+        var allHeaders = [];
+        filesData.forEach(function(fd) {
+            fd.headers.forEach(function(h) {
+                if (!headerSet.has(h)) {
+                    headerSet.add(h);
+                    allHeaders.push(h);
+                }
+            });
+        });
+
+        var allRows = [];
+        filesData.forEach(function(fd) {
+            if (allRows.length > 0) {
+                var gap = { _source: GAP_MARKER };
+                allHeaders.forEach(function(h) { gap[h] = null; });
+                allRows.push(gap);
+            }
+            fd.rows.forEach(function(row) {
+                allRows.push(Object.assign({}, row, { _source: fd.filename }));
+            });
+        });
+
+        return { headers: allHeaders, rows: allRows, fileNames: filesData.map(function(f) { return f.filename; }) };
+    }
+
+    // === Load all files combined ===
+    async function loadAllFiles() {
+        try {
+            document.getElementById('dashboard').innerHTML = '<div class="loading">Loading all files...</div>';
+            const rawEntries = [];
+            for (var i = 0; i < BUILTIN_FILES.length; i++) {
+                var f = BUILTIN_FILES[i];
+                var resp = await fetch(f);
+                if (!resp.ok) continue;
+                const text = await resp.text();
+                const data = parseCSV(text);
+                if (data && data.rows.length > 0) {
+                    rawEntries.push({ headers: data.headers, rows: data.rows, filename: f });
+                }
+            }
+            if (rawEntries.length === 0) throw new Error('No files loaded');
+
+            combinedRawFilesData = rawEntries;
+            const allEnriched = enrichCombinedRawData(rawEntries, getThresholds());
+            combinedFilesData = allEnriched;
+            currentMode = 'combined';
+            updateClearButton();
+            var merged = mergeDatasets(allEnriched);
+            renderCombinedDashboard(merged);
+        } catch (e) {
+            document.getElementById('dashboard').innerHTML =
+                '<div class="error">Failed to load files: ' + e.message + '<br>' +
+                '<small>If opening locally, use a local server: <code>python3 -m http.server</code></small></div>';
+        }
+    }
+
+    // === Combined stats ===
+    function renderCombinedStats(merged) {
+        var bar = document.getElementById('stats-bar');
+        var realRows = merged.rows.filter(function(r) { return r._source !== GAP_MARKER; });
+        var numericCols = merged.headers.filter(function(h) {
+            return realRows.some(function(r) { return typeof r[h] === 'number'; });
+        });
+
+        var html = '<div class="stat"><div class="stat-value">All Files</div><div class="stat-label">' + merged.fileNames.length + ' files combined</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + realRows.length.toLocaleString() + '</div><div class="stat-label">Total Data Points</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + merged.headers.length + '</div><div class="stat-label">Unique Columns</div></div>';
+        html += '<div class="stat"><div class="stat-value">' + numericCols.length + '</div><div class="stat-label">Numeric Sensors</div></div>';
+
+        bar.innerHTML = html;
+    }
+
+    // === Combined dashboard ===
+    function renderCombinedDashboard(merged) {
+        Object.values(charts).forEach(function(c) { c.destroy(); });
+        charts = {};
+        currentData = merged;
+
+        renderCombinedStats(merged);
+        document.getElementById('zoom-hint').style.display = 'block';
+
+        const dashboard = document.getElementById('dashboard');
+        dashboard.innerHTML = '';
+
+        var MAX_POINTS = 2000;
+        let chartCount = 0;
+
+        // Determine x-axis: use General.Time if available
+        const hasTime = merged.headers.includes('General.Time');
+        const hasUptime = merged.headers.includes('System Info.Uptime');
+
+        Object.entries(SENSOR_GROUPS).forEach(function(entry) {
+            var groupName = entry[0];
+            var patterns = entry[1];
+            var cols = matchColumns(merged.headers, patterns);
+            if (cols.length === 0) return;
+
+            var numericCols = cols.filter(function(c) {
+                return merged.rows.some(function(r) { return typeof r[c] === 'number'; });
+            });
+            if (numericCols.length === 0) return;
+
+            var chartId = 'chart-' + chartCount;
+            createChartCard(dashboard, groupName, chartId);
+
+            var datasets = [];
+            numericCols.forEach(function(col) {
+                merged.fileNames.forEach(function(fname, fi) {
+                    if (hasTime) {
+                        // Use {x, y} point format with time x-axis
+                        var xyData = [];
+                        merged.rows.forEach(function(r) {
+                            if (r._source === fname && typeof r[col] === 'number' && r['General.Time']) {
+                                xyData.push({ x: applyTzOffset(r['General.Time']), y: r[col] });
+                            }
+                        });
+                        if (xyData.length === 0) return;
+                        datasets.push({
+                            label: col.replace(/^[^.]+\./, '') + ' (' + fname + ')',
+                            data: downsample(xyData, MAX_POINTS),
+                            borderColor: FILE_COLORS[fi % FILE_COLORS.length],
+                            backgroundColor: FILE_COLORS[fi % FILE_COLORS.length] + '20',
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            tension: 0.3,
+                            spanGaps: false
+                        });
+                    } else {
+                        // Fall back to index-based
+                        var seriesData = merged.rows.map(function(r) {
+                            if (r._source === fname && typeof r[col] === 'number') return r[col];
+                            return null;
+                        });
+                        if (seriesData.every(function(v) { return v === null; })) return;
+                        datasets.push({
+                            label: col.replace(/^[^.]+\./, '') + ' (' + fname + ')',
+                            data: downsample(seriesData, MAX_POINTS),
+                            borderColor: FILE_COLORS[fi % FILE_COLORS.length],
+                            backgroundColor: FILE_COLORS[fi % FILE_COLORS.length] + '20',
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            tension: 0.3,
+                            spanGaps: false
+                        });
+                    }
+                });
+            });
+
+            if (datasets.length === 0) return;
+
+            if (hasTime) {
+                // Time x-axis with {x,y} data — no labels needed
+                charts[chartId] = createChart(chartId, null, 'Time', datasets,
+                    numericCols[0].replace(/^[^.]+\./, ''), false, '');
+            } else if (hasUptime) {
+                var xLabels = downsample(merged.rows.map(function(r) {
+                    var up = r['System Info.Uptime'];
+                    return typeof up === 'number' ? (up / 60000).toFixed(1) : null;
+                }), MAX_POINTS);
+                charts[chartId] = createChart(chartId, xLabels, 'Uptime (min)', datasets,
+                    numericCols[0].replace(/^[^.]+\./, ''), false, '');
+            } else {
+                var xLabels = downsample(merged.rows.map(function(_, i) { return i + 1; }), MAX_POINTS);
+                charts[chartId] = createChart(chartId, xLabels, 'Sample #', datasets,
+                    numericCols[0].replace(/^[^.]+\./, ''), false, '');
+            }
+            chartCount++;
+        });
+
+        if (chartCount === 0) {
+            dashboard.innerHTML = '<div class="error">No numeric sensor data found.</div>';
+        }
+    }
+
+    // =========================================================================
+    // DataLogger WebSocket download
+    // =========================================================================
+    var loggerWS = null;
+    var loggerFiles = [];
+    var loggerAllPages = [];
+    var loggerCurrentPage = 0;
+    var loggerExpectingMore = false;
+    var useProxy = false;
+    var proxyReady = false;
+
+    // Check if the CORS proxy (serve.py) is available.
+    // Only serve.py provides the /proxy-check endpoint; a plain
+    // python3 -m http.server returns 404 for it.
+    var proxyDetection = (async function detectProxy() {
+        try {
+            var resp = await fetch('/proxy-check');
+            useProxy = resp.ok;
+        } catch (e) {
+            useProxy = false;
+        }
+        proxyReady = true;
+    })();
+
+    /** Build download URL, routing through CORS proxy when available. */
+    function loggerDownloadUrl(baseUrl, filename) {
+        var directUrl = baseUrl + '/dl/' + encodeURIComponent(filename);
+        if (useProxy) {
+            return '/proxy?url=' + encodeURIComponent(directUrl);
+        }
+        return directUrl;
+    }
+
+    function loggerSetStatus(msg, type) {
+        var el = document.getElementById('logger-status');
+        el.textContent = msg;
+        el.className = 'logger-status' + (type ? ' ' + type : '');
+    }
+
+    function loggerConnect() {
+        var urlInput = document.getElementById('logger-url').value.trim().replace(/\/+$/, '');
+        if (!urlInput) { loggerSetStatus('Please enter the logger URL.', 'error'); return; }
+
+        var wsUrl = urlInput.replace(/^http/, 'ws') + '/ws';
+        loggerSetStatus('Connecting to ' + wsUrl + '...');
+        document.getElementById('btn-connect').disabled = true;
+        loggerFiles = [];
+        loggerAllPages = [];
+        loggerCurrentPage = 0;
+        loggerExpectingMore = false;
+        document.getElementById('logger-file-list').innerHTML = '';
+        document.getElementById('logger-actions').style.display = 'none';
+
+        try {
+            if (loggerWS && (loggerWS.readyState === 0 || loggerWS.readyState === 1)) {
+                loggerWS.close();
+            }
+            loggerWS = new WebSocket(wsUrl);
+        } catch (e) {
+            loggerSetStatus('Failed to connect: ' + e.message, 'error');
+            document.getElementById('btn-connect').disabled = false;
+            return;
+        }
+
+        loggerWS.onopen = function() {
+            loggerSetStatus('Connected. Fetching file list...');
+            loggerCurrentPage = 0;
+            loggerWS.send(JSON.stringify({ ty: 1, pg: 0 }));
+        };
+
+        loggerWS.onmessage = function(evt) {
+            try {
+                var msg = JSON.parse(evt.data);
+            } catch (e) {
+                loggerSetStatus('Invalid response from logger.', 'error');
+                return;
+            }
+
+            if (msg.files && Array.isArray(msg.files)) {
+                loggerAllPages = loggerAllPages.concat(msg.files);
+                loggerCurrentPage = msg.page || 0;
+
+                // DataLogger WebSocket returns up to 20 files per page;
+                // if we got a full page, request the next one
+                if (msg.count >= 20) {
+                    loggerExpectingMore = true;
+                    loggerWS.send(JSON.stringify({ ty: 1, pg: loggerCurrentPage + 1 }));
+                } else {
+                    // All pages fetched
+                    loggerFiles = loggerAllPages;
+                    loggerRenderFileList();
+                }
+            }
+        };
+
+        loggerWS.onerror = function() {
+            loggerSetStatus('WebSocket error. Make sure the logger is on the same network and the URL is correct.', 'error');
+            document.getElementById('btn-connect').disabled = false;
+        };
+
+        loggerWS.onclose = function() {
+            document.getElementById('btn-connect').disabled = false;
+            if (loggerExpectingMore && loggerAllPages.length > 0) {
+                loggerFiles = loggerAllPages;
+                loggerExpectingMore = false;
+                loggerRenderFileList();
+            } else if (loggerFiles.length === 0 && loggerAllPages.length === 0) {
+                loggerSetStatus('Connection closed. No files found or logger unreachable.', 'error');
+            }
+        };
+    }
+
+    async function loggerRenderFileList() {
+        await proxyDetection;
+        var container = document.getElementById('logger-file-list');
+        container.innerHTML = '';
+        var proxyNote = useProxy ? ' (via CORS proxy)' : ' ⚠️ Use python3 serve.py for CORS proxy if downloads fail';
+        loggerSetStatus('Found ' + loggerFiles.length + ' file(s). Select files to download:' + proxyNote, 'success');
+        document.getElementById('logger-actions').style.display = 'flex';
+
+        // Filter to only show .txt and .csv files (log files)
+        var logFiles = loggerFiles.filter(function(f) {
+            var name = f.name.toLowerCase();
+            return name.endsWith('.txt') || name.endsWith('.csv');
+        });
+
+        if (logFiles.length === 0) {
+            loggerSetStatus('Found ' + loggerFiles.length + ' file(s) but none are .txt/.csv log files.', 'error');
+            document.getElementById('logger-actions').style.display = 'none';
+            return;
+        }
+
+        logFiles.forEach(function(f, i) {
+            var div = document.createElement('div');
+            div.className = 'logger-file-item';
+
+            var cb = document.createElement('input');
+            cb.type = 'checkbox';
+            cb.id = 'logfile-' + i;
+            cb.dataset.filename = f.name;
+            cb.checked = true;
+
+            var lbl = document.createElement('label');
+            lbl.className = 'fname';
+            lbl.htmlFor = 'logfile-' + i;
+            lbl.textContent = f.name;
+
+            var sizeSpan = document.createElement('span');
+            sizeSpan.className = 'fsize';
+            sizeSpan.textContent = formatFileSize(f.size);
+
+            var dateSpan = document.createElement('span');
+            dateSpan.className = 'fdate';
+            dateSpan.textContent = f.time || '';
+
+            div.appendChild(cb);
+            div.appendChild(lbl);
+            div.appendChild(sizeSpan);
+            div.appendChild(dateSpan);
+            container.appendChild(div);
+        });
+    }
+
+    function formatFileSize(bytes) {
+        if (typeof bytes !== 'number') return bytes || '';
+        if (bytes < 1024) return bytes + ' B';
+        if (bytes < 1048576) return (bytes / 1024).toFixed(1) + ' KB';
+        return (bytes / 1048576).toFixed(1) + ' MB';
+    }
+
+    async function loggerDownloadSelected() {
+        // Ensure proxy detection has finished before downloading
+        await proxyDetection;
+
+        var checkboxes = document.querySelectorAll('#logger-file-list input[type="checkbox"]:checked');
+        if (checkboxes.length === 0) {
+            loggerSetStatus('No files selected.', 'error');
+            return;
+        }
+
+        var baseUrl = document.getElementById('logger-url').value.trim().replace(/\/+$/, '');
+        var dlStatus = document.getElementById('logger-dl-status');
+        var filenames = [];
+        checkboxes.forEach(function(cb) { filenames.push(cb.dataset.filename); });
+
+        dlStatus.textContent = 'Downloading 0/' + filenames.length + '...';
+        document.getElementById('btn-download-selected').disabled = true;
+
+        var filesData = [];
+        for (var i = 0; i < filenames.length; i++) {
+            var fname = filenames[i];
+            dlStatus.textContent = 'Downloading ' + (i + 1) + '/' + filenames.length + ': ' + fname;
+            try {
+                var resp = await fetch(loggerDownloadUrl(baseUrl, fname));
+                if (!resp.ok) throw new Error('HTTP ' + resp.status);
+                var text = await resp.text();
+                var data = parseCSV(text);
+                if (data && data.rows.length > 0) {
+                    filesData.push({ headers: data.headers, rows: data.rows, filename: fname });
+                }
+            } catch (e) {
+                var hint = useProxy ? '' : ' (try: python3 serve.py for CORS proxy)';
+                dlStatus.textContent = 'Error downloading ' + fname + ': ' + e.message + hint;
+            }
+        }
+
+        document.getElementById('btn-download-selected').disabled = false;
+
+        if (filesData.length === 0) {
+            dlStatus.textContent = 'No valid data found in downloaded files.';
+            return;
+        }
+
+        dlStatus.textContent = 'Loaded ' + filesData.length + ' file(s).';
+        document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
+
+        appendAndRender(filesData);
+    }
+
+    // === Initialize ===
+    function init() {
+        const controls = document.getElementById('controls');
+
+        var allBtn = document.createElement('button');
+        allBtn.className = 'file-btn load-all';
+        allBtn.textContent = '\uD83D\uDCCA All Files';
+        allBtn.onclick = function() {
+            document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
+            allBtn.classList.add('active');
+            loadAllFiles();
+        };
+        controls.insertBefore(allBtn, controls.firstChild);
+
+        BUILTIN_FILES.forEach(function(f) {
+            var btn = document.createElement('button');
+            btn.className = 'file-btn';
+            btn.textContent = f;
+            btn.onclick = function() {
+                document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
+                btn.classList.add('active');
+                loadBuiltinFile(f);
+            };
+            controls.insertBefore(btn, controls.firstChild);
+        });
+
+        document.getElementById('file-upload').addEventListener('change', function(e) {
+            if (e.target.files.length > 0) {
+                document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
+                loadUploadedFiles(e.target.files);
+                e.target.value = '';  // allow re-uploading same files
+            }
+        });
+
+        document.getElementById('settings-toggle').addEventListener('click', function() {
+            document.getElementById('settings-toggle').classList.toggle('open');
+            document.getElementById('settings-body').classList.toggle('open');
+        });
+
+        // Logger panel toggle and actions
+        document.getElementById('logger-toggle').addEventListener('click', function() {
+            document.getElementById('logger-toggle').classList.toggle('open');
+            document.getElementById('logger-body').classList.toggle('open');
+        });
+
+        document.getElementById('btn-connect').addEventListener('click', loggerConnect);
+
+        document.getElementById('logger-url').addEventListener('keydown', function(e) {
+            if (e.key === 'Enter') loggerConnect();
+        });
+
+        document.getElementById('btn-select-all').addEventListener('click', function() {
+            var checkboxes = document.querySelectorAll('#logger-file-list input[type="checkbox"]');
+            var allChecked = Array.from(checkboxes).every(function(cb) { return cb.checked; });
+            checkboxes.forEach(function(cb) { cb.checked = !allChecked; });
+        });
+
+        document.getElementById('btn-download-selected').addEventListener('click', loggerDownloadSelected);
+
+        document.getElementById('btn-clear-data').addEventListener('click', clearAccumulatedData);
+
+        document.getElementById('btn-apply-settings').addEventListener('click', function() {
+            if (currentMode === 'combined' && combinedRawFilesData.length > 0) {
+                // Re-compute derived fields from raw data with new thresholds
+                const allEnriched = enrichCombinedRawData(combinedRawFilesData, getThresholds());
+                combinedFilesData = allEnriched;
+                const merged = mergeDatasets(allEnriched);
+                renderCombinedDashboard(merged);
+            } else if (rawParsedData && currentFilename) {
+                var freshData = { headers: rawParsedData.headers.slice(), rows: rawParsedData.rows.map(function(r) { return Object.assign({}, r); }) };
+                var enriched = computeDerivedFields(freshData, getThresholds());
+                combinedFilesData = [{ headers: enriched.headers, rows: enriched.rows, filename: currentFilename }];
+                combinedRawFilesData = [{ headers: rawParsedData.headers, rows: rawParsedData.rows, filename: currentFilename }];
+                renderDashboard(enriched, currentFilename);
+            }
+        });
+    }
+
+    init();
+    </script>
+</body>
+</html>
