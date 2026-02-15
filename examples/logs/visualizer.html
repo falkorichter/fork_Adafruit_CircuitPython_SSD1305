@@ -383,6 +383,18 @@
         <div class="settings-body" id="settings-body">
             <div class="settings-grid">
                 <div class="setting-group">
+                    <h4>🕐 Time Offset</h4>
+                    <div class="setting-row">
+                        <label>Offset (hours)</label>
+                        <div style="display:flex;align-items:center;gap:6px">
+                            <button type="button" onclick="document.getElementById('cfg-tz-offset').stepDown();updateTzLabel()" style="padding:2px 8px;cursor:pointer">−</button>
+                            <input type="number" id="cfg-tz-offset" value="0" step="1" min="-12" max="14" style="width:60px;text-align:center">
+                            <button type="button" onclick="document.getElementById('cfg-tz-offset').stepUp();updateTzLabel()" style="padding:2px 8px;cursor:pointer">+</button>
+                            <span id="tz-label" style="color:#94a3b8;font-size:12px">UTC±0</span>
+                        </div>
+                    </div>
+                </div>
+                <div class="setting-group">
                     <h4>🧍 Person Detection (STHS34PF80)</h4>
                     <div class="setting-row">
                         <label>Presence threshold</label>
@@ -477,6 +489,24 @@
     let rawParsedData = null;
     let combinedFilesData = [];  // accumulated {headers, rows, filename} objects (enriched)
     let combinedRawFilesData = [];  // accumulated {headers, rows, filename} objects (raw, pre-derived)
+
+    // === Timezone offset ===
+    function getTzOffsetMs() {
+        return (parseFloat(document.getElementById('cfg-tz-offset').value) || 0) * 3600000;
+    }
+    function applyTzOffset(isoStr) {
+        if (!isoStr || typeof isoStr !== 'string') return isoStr;
+        const offsetMs = getTzOffsetMs();
+        if (offsetMs === 0) return isoStr;
+        const d = new Date(isoStr);
+        if (isNaN(d.getTime())) return isoStr;
+        return new Date(d.getTime() + offsetMs).toISOString().replace('Z', '');
+    }
+    function updateTzLabel() {
+        const h = parseFloat(document.getElementById('cfg-tz-offset').value) || 0;
+        const sign = h >= 0 ? '+' : '';
+        document.getElementById('tz-label').textContent = 'UTC' + sign + h;
+    }
 
     // === Read thresholds from UI ===
     function getThresholds() {
@@ -688,7 +718,7 @@
         if (data.headers.includes('General.Time')) {
             return {
                 type: 'time',
-                labels: data.rows.map(r => r['General.Time']),
+                labels: data.rows.map(r => applyTzOffset(r['General.Time'])),
                 label: 'Time'
             };
         }
@@ -796,6 +826,11 @@
             if (!isNaN(first.getTime()) && !isNaN(last.getTime())) {
                 const mins = ((last - first) / 60000).toFixed(0);
                 html += '<div class="stat"><div class="stat-value">' + mins + ' min</div><div class="stat-label">Duration</div></div>';
+                const offsetH = parseFloat(document.getElementById('cfg-tz-offset').value) || 0;
+                if (offsetH !== 0) {
+                    const sign = offsetH >= 0 ? '+' : '';
+                    html += '<div class="stat"><div class="stat-value">UTC' + sign + offsetH + '</div><div class="stat-label">Time Offset</div></div>';
+                }
             }
         } else if (data.headers.includes('System Info.Uptime') && data.rows.length >= 2) {
             const dur = (data.rows[data.rows.length - 1]['System Info.Uptime'] - data.rows[0]['System Info.Uptime']) / 60000;
@@ -1310,7 +1345,7 @@
                         var xyData = [];
                         merged.rows.forEach(function(r) {
                             if (r._source === fname && typeof r[col] === 'number' && r['General.Time']) {
-                                xyData.push({ x: r['General.Time'], y: r[col] });
+                                xyData.push({ x: applyTzOffset(r['General.Time']), y: r[col] });
                             }
                         });
                         if (xyData.length === 0) return;
