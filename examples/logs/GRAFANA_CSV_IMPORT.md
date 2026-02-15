@@ -1,5 +1,7 @@
 # Grafana CSV Log Import Guide
 
+> ⚠️ **Status: Untested** — This guide has not been validated end-to-end yet. The scripts and commands below are based on the InfluxDB and Telegraf documentation but need real-world testing. See [issue tracking](../../issues) for updates.
+
 This guide explains how to import SparkFun DataLogger CSV log files into InfluxDB/Grafana, especially useful when WiFi was offline and MQTT data wasn't delivered in real-time.
 
 ## Overview
