@@ -5,6 +5,8 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Sensor Log Visualizer</title>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1"></script>
     <script src="https://cdn.jsdelivr.net/npm/hammerjs@2"></script>
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-zoom@2"></script>
     <style>
@@ -297,6 +299,37 @@
         .chart-card.fullscreen .btn-fullscreen {
             top: 16px; right: 16px; font-size: 1.3em;
         }
+        .chart-nav-toolbar {
+            display: none;
+            justify-content: center;
+            align-items: center;
+            gap: 6px;
+            margin-bottom: 8px;
+        }
+        .chart-card.fullscreen .chart-nav-toolbar { display: flex; }
+        .chart-nav-btn {
+            background: var(--surface);
+            border: 1px solid var(--border);
+            color: #ccc;
+            cursor: pointer;
+            font-size: 1.1em;
+            width: 36px;
+            height: 36px;
+            border-radius: 6px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            line-height: 1;
+            user-select: none;
+        }
+        .chart-nav-btn:hover { color: #fff; border-color: var(--accent); }
+        .chart-nav-btn:active { background: var(--accent); }
+        .chart-nav-sep { width: 12px; }
+        .chart-nav-hint {
+            font-size: 0.75em;
+            color: #666;
+            margin-left: 12px;
+        }
         .loading {
             text-align: center;
             padding: 60px;
@@ -396,7 +429,7 @@
     </div>
 
     <div class="stats-bar" id="stats-bar"></div>
-    <div class="zoom-hint" id="zoom-hint" style="display:none">🔍 Scroll to zoom · Drag to pan · Double-click to reset zoom</div>
+    <div class="zoom-hint" id="zoom-hint" style="display:none">🔍 Scroll to zoom · Drag to pan · Double-click to reset · Keyboard: ← → pan · + − zoom · Home reset · <strong>Zoom syncs across all charts</strong></div>
     <div id="dashboard" class="dashboard">
         <div class="loading" id="loading">Select a log file above or upload your own CSV/TXT files to get started.</div>
     </div>
@@ -442,7 +475,8 @@
     let currentFilename = null;
     let currentMode = 'single';
     let rawParsedData = null;
-    let combinedFilesData = [];  // accumulated {headers, rows, filename} objects
+    let combinedFilesData = [];  // accumulated {headers, rows, filename} objects (enriched)
+    let combinedRawFilesData = [];  // accumulated {headers, rows, filename} objects (raw, pre-derived)
 
     // === Read thresholds from UI ===
     function getThresholds() {
@@ -688,13 +722,60 @@
 
     function zoomPluginConfig() {
         return {
-            pan: { enabled: true, mode: 'x', threshold: 5 },
+            pan: {
+                enabled: true,
+                mode: 'x',
+                threshold: 5,
+                onPanComplete: function(ctx) { syncZoomFromChart(ctx.chart); }
+            },
             zoom: {
                 wheel: { enabled: true },
                 pinch: { enabled: true },
                 mode: 'x',
+                onZoomComplete: function(ctx) { syncZoomFromChart(ctx.chart); }
             }
         };
+    }
+
+    /** Read the current x-axis min/max from a chart and apply to all others */
+    function syncZoomFromChart(sourceChart) {
+        const sx = sourceChart.scales.x;
+        if (!sx) return;
+        const min = sx.min;
+        const max = sx.max;
+        Object.values(charts).forEach(function(c) {
+            if (c === sourceChart) return;
+            if (!c.scales || !c.scales.x) return;
+            c.scales.x.options.min = min;
+            c.scales.x.options.max = max;
+            c.update('none');
+        });
+    }
+
+    /** Reset zoom on ALL charts */
+    function resetAllZoom() {
+        Object.values(charts).forEach(function(c) {
+            c.resetZoom('none');
+        });
+    }
+
+    /** Programmatic zoom in/out on ALL charts */
+    function zoomAllCharts(factor) {
+        Object.values(charts).forEach(function(c) {
+            c.zoom(factor, 'none');
+        });
+        // Sync after zoom so all charts stay aligned
+        const first = Object.values(charts)[0];
+        if (first) syncZoomFromChart(first);
+    }
+
+    /** Programmatic pan ALL charts by a pixel delta */
+    function panAllCharts(deltaPixels) {
+        Object.values(charts).forEach(function(c) {
+            c.pan({ x: deltaPixels }, undefined, 'none');
+        });
+        const first = Object.values(charts)[0];
+        if (first) syncZoomFromChart(first);
     }
 
     // === Render Stats Bar ===
@@ -739,7 +820,17 @@
         if (e.key === 'Escape') {
             const fs = document.querySelector('.chart-card.fullscreen');
             if (fs) toggleFullscreen(fs.querySelector('.btn-fullscreen'));
+            return;
         }
+        // Keyboard zoom/pan — active when any chart is fullscreen OR focus is not in an input
+        const inInput = e.target.tagName === 'INPUT' || e.target.tagName === 'TEXTAREA';
+        if (inInput) return;
+        if (Object.keys(charts).length === 0) return;
+        if (e.key === 'ArrowLeft') { e.preventDefault(); panAllCharts(100); }
+        else if (e.key === 'ArrowRight') { e.preventDefault(); panAllCharts(-100); }
+        else if (e.key === '+' || e.key === '=') { e.preventDefault(); zoomAllCharts(1.25); }
+        else if (e.key === '-' || e.key === '_') { e.preventDefault(); zoomAllCharts(0.8); }
+        else if (e.key === 'Home') { e.preventDefault(); resetAllZoom(); }
     });
 
     function createChartCard(dashboard, title, chartId) {
@@ -754,6 +845,30 @@
         const h3 = document.createElement('h3');
         h3.textContent = title;
         card.appendChild(h3);
+
+        // Navigation toolbar (visible in fullscreen)
+        const toolbar = document.createElement('div');
+        toolbar.className = 'chart-nav-toolbar';
+        [
+            { label: '◀', title: 'Pan left (←)', action: function() { panAllCharts(100); } },
+            { label: '−', title: 'Zoom out (−)', action: function() { zoomAllCharts(0.8); } },
+            { label: '⟳', title: 'Reset zoom (Home / double-click)', action: function() { resetAllZoom(); } },
+            { label: '+', title: 'Zoom in (+)', action: function() { zoomAllCharts(1.25); } },
+            { label: '▶', title: 'Pan right (→)', action: function() { panAllCharts(-100); } },
+        ].forEach(function(def) {
+            const b = document.createElement('button');
+            b.className = 'chart-nav-btn';
+            b.textContent = def.label;
+            b.title = def.title;
+            b.onclick = def.action;
+            toolbar.appendChild(b);
+        });
+        const hint = document.createElement('span');
+        hint.className = 'chart-nav-hint';
+        hint.textContent = 'Keyboard: ← → pan · + − zoom · Home reset · Synced across all charts';
+        toolbar.appendChild(hint);
+        card.appendChild(toolbar);
+
         const container = document.createElement('div');
         container.className = 'chart-container';
         const canvas = document.createElement('canvas');
@@ -768,8 +883,17 @@
     function createChart(canvasId, xLabels, xLabel, datasets, yLabel, needsDualAxis, dualLabel) {
         const ctx = document.getElementById(canvasId).getContext('2d');
 
+        // When xLabels is null, datasets use {x, y} format with time x-axis
+        const isTimeXY = (xLabels === null && xLabel === 'Time');
+
         const scales = {
-            x: {
+            x: isTimeXY ? {
+                type: 'time',
+                time: { tooltipFormat: 'yyyy-MM-dd HH:mm:ss' },
+                title: { display: true, text: xLabel, color: '#888' },
+                ticks: { color: '#666', maxTicksLimit: 10 },
+                grid: { color: '#ffffff10' }
+            } : {
                 title: { display: true, text: xLabel, color: '#888' },
                 ticks: { color: '#666', maxTicksLimit: 10 },
                 grid: { color: '#ffffff10' }
@@ -791,9 +915,13 @@
             };
         }
 
+        const chartData = isTimeXY
+            ? { datasets: datasets }
+            : { labels: xLabels, datasets: datasets };
+
         return new Chart(ctx, {
             type: 'line',
-            data: { labels: xLabels, datasets: datasets },
+            data: chartData,
             options: {
                 responsive: true,
                 maintainAspectRatio: false,
@@ -920,6 +1048,7 @@
             if (!data || data.rows.length === 0) throw new Error('No data found');
 
             const enriched = computeDerivedFields(data, getThresholds());
+            combinedRawFilesData = [{ headers: data.headers, rows: data.rows, filename: filename }];
             combinedFilesData = [{ headers: enriched.headers, rows: enriched.rows, filename: filename }];
             rawParsedData = parseCSV(text);
             currentFilename = filename;
@@ -945,41 +1074,106 @@
 
     async function loadUploadedFiles(fileList) {
         const files = Array.from(fileList);
-        const newEntries = [];
+        const newRawEntries = [];
         for (let i = 0; i < files.length; i++) {
             const text = await readFileAsText(files[i]);
             const data = parseCSV(text);
             if (data && data.rows.length > 0) {
-                const enriched = computeDerivedFields(data, getThresholds());
-                newEntries.push({ headers: enriched.headers, rows: enriched.rows, filename: files[i].name });
+                newRawEntries.push({ headers: data.headers, rows: data.rows, filename: files[i].name });
             }
         }
-        if (newEntries.length === 0) {
+        if (newRawEntries.length === 0) {
             document.getElementById('dashboard').innerHTML =
                 '<div class="error">No valid data found in uploaded file(s).</div>';
             return;
         }
-        appendAndRender(newEntries);
+        appendAndRender(newRawEntries);
     }
 
-    function appendAndRender(newEntries) {
-        combinedFilesData = combinedFilesData.concat(newEntries);
+    /**
+     * Append raw (pre-derived) file entries and render.
+     * When multiple files are present, all rows are merged, sorted by time,
+     * and derived fields (air quality, magnet detection) are computed on
+     * the combined dataset so baselines carry across files.
+     */
+    function appendAndRender(newRawEntries) {
+        combinedRawFilesData = combinedRawFilesData.concat(newRawEntries);
         updateClearButton();
-        if (combinedFilesData.length === 1) {
-            const fd = combinedFilesData[0];
+
+        if (combinedRawFilesData.length === 1) {
+            // Single file: compute derived fields directly
+            const fd = combinedRawFilesData[0];
+            const fresh = { headers: fd.headers.slice(), rows: fd.rows.map(function(r) { return Object.assign({}, r); }) };
+            const enriched = computeDerivedFields(fresh, getThresholds());
+            combinedFilesData = [{ headers: enriched.headers, rows: enriched.rows, filename: fd.filename }];
             rawParsedData = { headers: fd.headers, rows: fd.rows };
             currentFilename = fd.filename;
             currentMode = 'single';
-            renderDashboard(fd, fd.filename);
+            renderDashboard(enriched, fd.filename);
         } else {
+            // Multiple files: merge all raw rows, sort by time, compute
+            // derived fields once so baselines (gas, magnet) carry across files
+            const allEnriched = enrichCombinedRawData(combinedRawFilesData, getThresholds());
+            combinedFilesData = allEnriched;
             currentMode = 'combined';
-            const merged = mergeDatasets(combinedFilesData);
+            const merged = mergeDatasets(allEnriched);
             renderCombinedDashboard(merged);
         }
     }
 
+    /**
+     * Merge raw rows from all files, sort by time, compute derived fields
+     * on the combined dataset, then split back into per-file entries.
+     */
+    function enrichCombinedRawData(rawFilesData, thresholds) {
+        // Union headers
+        const headerSet = new Set();
+        const allHeaders = [];
+        rawFilesData.forEach(function(fd) {
+            fd.headers.forEach(function(h) {
+                if (!headerSet.has(h)) { headerSet.add(h); allHeaders.push(h); }
+            });
+        });
+
+        // Tag each row with its source file and merge
+        const taggedRows = [];
+        rawFilesData.forEach(function(fd) {
+            fd.rows.forEach(function(row) {
+                taggedRows.push(Object.assign({}, row, { _source: fd.filename }));
+            });
+        });
+
+        // Sort by General.Time if available, otherwise by General.Entry or original order
+        const hasTime = allHeaders.includes('General.Time');
+        if (hasTime) {
+            taggedRows.sort(function(a, b) {
+                const ta = new Date(a['General.Time']).getTime();
+                const tb = new Date(b['General.Time']).getTime();
+                if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
+                return 0;
+            });
+        }
+
+        // Compute derived fields on the entire combined dataset
+        const combined = { headers: allHeaders, rows: taggedRows };
+        const enriched = computeDerivedFields(combined, thresholds);
+
+        // Split back into per-file entries
+        const byFile = {};
+        rawFilesData.forEach(function(fd) { byFile[fd.filename] = []; });
+        enriched.rows.forEach(function(row) {
+            const src = row._source;
+            if (byFile[src]) byFile[src].push(row);
+        });
+
+        return rawFilesData.map(function(fd) {
+            return { headers: enriched.headers, rows: byFile[fd.filename] || [], filename: fd.filename };
+        });
+    }
+
     function clearAccumulatedData() {
         combinedFilesData = [];
+        combinedRawFilesData = [];
         currentData = null;
         rawParsedData = null;
         currentFilename = null;
@@ -1030,7 +1224,7 @@
     async function loadAllFiles() {
         try {
             document.getElementById('dashboard').innerHTML = '<div class="loading">Loading all files...</div>';
-            const filesData = [];
+            const rawEntries = [];
             for (var i = 0; i < BUILTIN_FILES.length; i++) {
                 var f = BUILTIN_FILES[i];
                 var resp = await fetch(f);
@@ -1038,16 +1232,17 @@
                 const text = await resp.text();
                 const data = parseCSV(text);
                 if (data && data.rows.length > 0) {
-                    const enriched = computeDerivedFields(data, getThresholds());
-                    filesData.push({ headers: enriched.headers, rows: enriched.rows, filename: f });
+                    rawEntries.push({ headers: data.headers, rows: data.rows, filename: f });
                 }
             }
-            if (filesData.length === 0) throw new Error('No files loaded');
+            if (rawEntries.length === 0) throw new Error('No files loaded');
 
-            combinedFilesData = filesData;
+            combinedRawFilesData = rawEntries;
+            const allEnriched = enrichCombinedRawData(rawEntries, getThresholds());
+            combinedFilesData = allEnriched;
             currentMode = 'combined';
             updateClearButton();
-            var merged = mergeDatasets(filesData);
+            var merged = mergeDatasets(allEnriched);
             renderCombinedDashboard(merged);
         } catch (e) {
             document.getElementById('dashboard').innerHTML =
@@ -1087,6 +1282,10 @@
         var MAX_POINTS = 2000;
         let chartCount = 0;
 
+        // Determine x-axis: use General.Time if available
+        const hasTime = merged.headers.includes('General.Time');
+        const hasUptime = merged.headers.includes('System Info.Uptime');
+
         Object.entries(SENSOR_GROUPS).forEach(function(entry) {
             var groupName = entry[0];
             var patterns = entry[1];
@@ -1104,31 +1303,64 @@
             var datasets = [];
             numericCols.forEach(function(col) {
                 merged.fileNames.forEach(function(fname, fi) {
-                    var seriesData = merged.rows.map(function(r) {
-                        if (r._source === fname && typeof r[col] === 'number') return r[col];
-                        return null;
-                    });
-                    if (seriesData.every(function(v) { return v === null; })) return;
-
-                    var shortCol = col.replace(/^[^.]+\./, '');
-                    datasets.push({
-                        label: shortCol + ' (' + fname + ')',
-                        data: downsample(seriesData, MAX_POINTS),
-                        borderColor: FILE_COLORS[fi % FILE_COLORS.length],
-                        backgroundColor: FILE_COLORS[fi % FILE_COLORS.length] + '20',
-                        borderWidth: 1.5,
-                        pointRadius: 0,
-                        tension: 0.3,
-                        spanGaps: false
-                    });
+                    if (hasTime) {
+                        // Use {x, y} point format with time x-axis
+                        var xyData = [];
+                        merged.rows.forEach(function(r) {
+                            if (r._source === fname && typeof r[col] === 'number' && r['General.Time']) {
+                                xyData.push({ x: r['General.Time'], y: r[col] });
+                            }
+                        });
+                        if (xyData.length === 0) return;
+                        datasets.push({
+                            label: col.replace(/^[^.]+\./, '') + ' (' + fname + ')',
+                            data: downsample(xyData, MAX_POINTS),
+                            borderColor: FILE_COLORS[fi % FILE_COLORS.length],
+                            backgroundColor: FILE_COLORS[fi % FILE_COLORS.length] + '20',
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            tension: 0.3,
+                            spanGaps: false
+                        });
+                    } else {
+                        // Fall back to index-based
+                        var seriesData = merged.rows.map(function(r) {
+                            if (r._source === fname && typeof r[col] === 'number') return r[col];
+                            return null;
+                        });
+                        if (seriesData.every(function(v) { return v === null; })) return;
+                        datasets.push({
+                            label: col.replace(/^[^.]+\./, '') + ' (' + fname + ')',
+                            data: downsample(seriesData, MAX_POINTS),
+                            borderColor: FILE_COLORS[fi % FILE_COLORS.length],
+                            backgroundColor: FILE_COLORS[fi % FILE_COLORS.length] + '20',
+                            borderWidth: 1.5,
+                            pointRadius: 0,
+                            tension: 0.3,
+                            spanGaps: false
+                        });
+                    }
                 });
             });
 
             if (datasets.length === 0) return;
 
-            var xLabels = downsample(merged.rows.map(function(_, i) { return i + 1; }), MAX_POINTS);
-            charts[chartId] = createChart(chartId, xLabels, 'Sample #', datasets,
-                numericCols[0].replace(/^[^.]+\./, ''), false, '');
+            if (hasTime) {
+                // Time x-axis with {x,y} data — no labels needed
+                charts[chartId] = createChart(chartId, null, 'Time', datasets,
+                    numericCols[0].replace(/^[^.]+\./, ''), false, '');
+            } else if (hasUptime) {
+                var xLabels = downsample(merged.rows.map(function(r) {
+                    var up = r['System Info.Uptime'];
+                    return typeof up === 'number' ? (up / 60000).toFixed(1) : null;
+                }), MAX_POINTS);
+                charts[chartId] = createChart(chartId, xLabels, 'Uptime (min)', datasets,
+                    numericCols[0].replace(/^[^.]+\./, ''), false, '');
+            } else {
+                var xLabels = downsample(merged.rows.map(function(_, i) { return i + 1; }), MAX_POINTS);
+                charts[chartId] = createChart(chartId, xLabels, 'Sample #', datasets,
+                    numericCols[0].replace(/^[^.]+\./, ''), false, '');
+            }
             chartCount++;
         });
 
@@ -1335,8 +1567,7 @@
                 var text = await resp.text();
                 var data = parseCSV(text);
                 if (data && data.rows.length > 0) {
-                    var enriched = computeDerivedFields(data, getThresholds());
-                    filesData.push({ headers: enriched.headers, rows: enriched.rows, filename: fname });
+                    filesData.push({ headers: data.headers, rows: data.rows, filename: fname });
                 }
             } catch (e) {
                 var hint = useProxy ? '' : ' (try: python3 serve.py for CORS proxy)';
@@ -1419,20 +1650,17 @@
         document.getElementById('btn-clear-data').addEventListener('click', clearAccumulatedData);
 
         document.getElementById('btn-apply-settings').addEventListener('click', function() {
-            if (currentMode === 'combined' && combinedFilesData.length > 0) {
-                // Re-compute derived fields with new thresholds for all accumulated data
-                const recomputed = combinedFilesData.map(function(fd) {
-                    const fresh = { headers: fd.headers.slice(), rows: fd.rows.map(function(r) { return Object.assign({}, r); }) };
-                    const enriched = computeDerivedFields(fresh, getThresholds());
-                    return { headers: enriched.headers, rows: enriched.rows, filename: fd.filename };
-                });
-                combinedFilesData = recomputed;
-                const merged = mergeDatasets(recomputed);
+            if (currentMode === 'combined' && combinedRawFilesData.length > 0) {
+                // Re-compute derived fields from raw data with new thresholds
+                const allEnriched = enrichCombinedRawData(combinedRawFilesData, getThresholds());
+                combinedFilesData = allEnriched;
+                const merged = mergeDatasets(allEnriched);
                 renderCombinedDashboard(merged);
             } else if (rawParsedData && currentFilename) {
                 var freshData = { headers: rawParsedData.headers.slice(), rows: rawParsedData.rows.map(function(r) { return Object.assign({}, r); }) };
                 var enriched = computeDerivedFields(freshData, getThresholds());
                 combinedFilesData = [{ headers: enriched.headers, rows: enriched.rows, filename: currentFilename }];
+                combinedRawFilesData = [{ headers: rawParsedData.headers, rows: rawParsedData.rows, filename: currentFilename }];
                 renderDashboard(enriched, currentFilename);
             }
         });
