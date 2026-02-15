@@ -1143,15 +1143,17 @@
             });
         });
 
-        // Sort by General.Time if available, otherwise by General.Entry or original order
+        // Sort by General.Time if available; preserve original order as tiebreaker
         const hasTime = allHeaders.includes('General.Time');
         if (hasTime) {
+            taggedRows.forEach(function(r, i) { r._sortIdx = i; });
             taggedRows.sort(function(a, b) {
                 const ta = new Date(a['General.Time']).getTime();
                 const tb = new Date(b['General.Time']).getTime();
-                if (!isNaN(ta) && !isNaN(tb)) return ta - tb;
-                return 0;
+                if (!isNaN(ta) && !isNaN(tb)) return ta - tb || a._sortIdx - b._sortIdx;
+                return a._sortIdx - b._sortIdx;
             });
+            taggedRows.forEach(function(r) { delete r._sortIdx; });
         }
 
         // Compute derived fields on the entire combined dataset
