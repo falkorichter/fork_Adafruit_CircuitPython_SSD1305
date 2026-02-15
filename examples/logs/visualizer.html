@@ -318,6 +318,7 @@
     <div class="controls" id="controls">
         <label class="upload-btn" for="file-upload">📁 Upload CSV/TXT files</label>
         <input type="file" id="file-upload" accept=".txt,.csv" multiple>
+        <button id="btn-clear-data" class="upload-btn" style="display:none;background:#c0392b;border-color:#e74c3c;cursor:pointer;" title="Clear all loaded data">🗑️ Clear All</button>
     </div>
 
     <div class="logger-panel" id="logger-panel">
@@ -441,6 +442,7 @@
     let currentFilename = null;
     let currentMode = 'single';
     let rawParsedData = null;
+    let combinedFilesData = [];  // accumulated {headers, rows, filename} objects
 
     // === Read thresholds from UI ===
     function getThresholds() {
@@ -917,11 +919,13 @@
             const data = parseCSV(text);
             if (!data || data.rows.length === 0) throw new Error('No data found');
 
+            const enriched = computeDerivedFields(data, getThresholds());
+            combinedFilesData = [{ headers: enriched.headers, rows: enriched.rows, filename: filename }];
             rawParsedData = parseCSV(text);
             currentFilename = filename;
             currentMode = 'single';
+            updateClearButton();
 
-            const enriched = computeDerivedFields(data, getThresholds());
             renderDashboard(enriched, filename);
         } catch (e) {
             document.getElementById('dashboard').innerHTML =
@@ -930,23 +934,67 @@
         }
     }
 
-    function loadUploadedFile(file) {
-        const reader = new FileReader();
-        reader.onload = function() {
-            var data = parseCSV(reader.result);
-            if (!data || data.rows.length === 0) {
-                document.getElementById('dashboard').innerHTML =
-                    '<div class="error">No valid data found in ' + file.name + '</div>';
-                return;
-            }
-            rawParsedData = parseCSV(reader.result);
-            currentFilename = file.name;
-            currentMode = 'single';
+    function readFileAsText(file) {
+        return new Promise(function(resolve, reject) {
+            const reader = new FileReader();
+            reader.onload = function() { resolve(reader.result); };
+            reader.onerror = function() { reject(new Error('Failed to read ' + file.name)); };
+            reader.readAsText(file);
+        });
+    }
 
-            const enriched = computeDerivedFields(data, getThresholds());
-            renderDashboard(enriched, file.name);
-        };
-        reader.readAsText(file);
+    async function loadUploadedFiles(files) {
+        const newEntries = [];
+        for (let i = 0; i < files.length; i++) {
+            const text = await readFileAsText(files[i]);
+            const data = parseCSV(text);
+            if (data && data.rows.length > 0) {
+                const enriched = computeDerivedFields(data, getThresholds());
+                newEntries.push({ headers: enriched.headers, rows: enriched.rows, filename: files[i].name });
+            }
+        }
+        if (newEntries.length === 0) {
+            document.getElementById('dashboard').innerHTML =
+                '<div class="error">No valid data found in uploaded file(s).</div>';
+            return;
+        }
+        appendAndRender(newEntries);
+    }
+
+    function appendAndRender(newEntries) {
+        combinedFilesData = combinedFilesData.concat(newEntries);
+        updateClearButton();
+        if (combinedFilesData.length === 1) {
+            const fd = combinedFilesData[0];
+            rawParsedData = { headers: fd.headers, rows: fd.rows };
+            currentFilename = fd.filename;
+            currentMode = 'single';
+            renderDashboard(fd, fd.filename);
+        } else {
+            currentMode = 'combined';
+            const merged = mergeDatasets(combinedFilesData);
+            renderCombinedDashboard(merged);
+        }
+    }
+
+    function clearAccumulatedData() {
+        combinedFilesData = [];
+        currentData = null;
+        rawParsedData = null;
+        currentFilename = null;
+        currentMode = 'single';
+        Object.values(charts).forEach(function(c) { c.destroy(); });
+        charts = {};
+        document.getElementById('dashboard').innerHTML =
+            '<p style="color:#8899aa;text-align:center;margin-top:80px;">Select a log file above or upload your own CSV/TXT files to get started.</p>';
+        document.getElementById('stats-bar').innerHTML = '';
+        document.getElementById('zoom-hint').style.display = 'none';
+        updateClearButton();
+    }
+
+    function updateClearButton() {
+        const btn = document.getElementById('btn-clear-data');
+        if (btn) btn.style.display = combinedFilesData.length > 0 ? 'inline-block' : 'none';
     }
 
     // === Merge datasets ===
@@ -995,7 +1043,9 @@
             }
             if (filesData.length === 0) throw new Error('No files loaded');
 
+            combinedFilesData = filesData;
             currentMode = 'combined';
+            updateClearButton();
             var merged = mergeDatasets(filesData);
             renderCombinedDashboard(merged);
         } catch (e) {
@@ -1303,16 +1353,7 @@
         dlStatus.textContent = 'Loaded ' + filesData.length + ' file(s).';
         document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
 
-        if (filesData.length === 1) {
-            currentFilename = filesData[0].filename;
-            currentMode = 'single';
-            rawParsedData = { headers: filesData[0].headers, rows: filesData[0].rows };
-            renderDashboard(filesData[0], filesData[0].filename);
-        } else {
-            currentMode = 'combined';
-            var merged = mergeDatasets(filesData);
-            renderCombinedDashboard(merged);
-        }
+        appendAndRender(filesData);
     }
 
     // === Initialize ===
@@ -1344,7 +1385,8 @@
         document.getElementById('file-upload').addEventListener('change', function(e) {
             if (e.target.files.length > 0) {
                 document.querySelectorAll('.file-btn').forEach(function(b) { b.classList.remove('active'); });
-                loadUploadedFile(e.target.files[0]);
+                loadUploadedFiles(e.target.files);
+                e.target.value = '';  // allow re-uploading same files
             }
         });
 
@@ -1373,12 +1415,23 @@
 
         document.getElementById('btn-download-selected').addEventListener('click', loggerDownloadSelected);
 
+        document.getElementById('btn-clear-data').addEventListener('click', clearAccumulatedData);
+
         document.getElementById('btn-apply-settings').addEventListener('click', function() {
-            if (currentMode === 'combined') {
-                loadAllFiles();
+            if (currentMode === 'combined' && combinedFilesData.length > 0) {
+                // Re-compute derived fields with new thresholds for all accumulated data
+                const recomputed = combinedFilesData.map(function(fd) {
+                    const fresh = { headers: fd.headers.slice(), rows: fd.rows.map(function(r) { return Object.assign({}, r); }) };
+                    const enriched = computeDerivedFields(fresh, getThresholds());
+                    return { headers: enriched.headers, rows: enriched.rows, filename: fd.filename };
+                });
+                combinedFilesData = recomputed;
+                const merged = mergeDatasets(recomputed);
+                renderCombinedDashboard(merged);
             } else if (rawParsedData && currentFilename) {
                 var freshData = { headers: rawParsedData.headers.slice(), rows: rawParsedData.rows.map(function(r) { return Object.assign({}, r); }) };
                 var enriched = computeDerivedFields(freshData, getThresholds());
+                combinedFilesData = [{ headers: enriched.headers, rows: enriched.rows, filename: currentFilename }];
                 renderDashboard(enriched, currentFilename);
             }
         });
