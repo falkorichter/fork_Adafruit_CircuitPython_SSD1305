@@ -943,7 +943,8 @@
         });
     }
 
-    async function loadUploadedFiles(files) {
+    async function loadUploadedFiles(fileList) {
+        const files = Array.from(fileList);
         const newEntries = [];
         for (let i = 0; i < files.length; i++) {
             const text = await readFileAsText(files[i]);
